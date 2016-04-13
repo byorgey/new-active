@@ -1,0 +1,38 @@
+
+Functional pearl about 'active'
+
+* Titles/focus?
+
+"Programming with active values"
+"Programming with bounded functional functional values"
+?
+
+Focus just on 'active' part?  Or generalize to arbitrary vector spaces
+as well?
+
+* To do
+
+  + Polish 'active' library and get it released... generate some
+    discussion etc.
+
+  + split out 'Bounded' (well, rename it 'Envelope' first) into its
+    own package?
+
+* Outline/brainstorming
+
+  + Start with intuition/motivation
+  + Build up semantics compositionally
+  + Discussion of Apply, Semigroup, etc.
+  + Define useful combinators
+  + Lots of fun examples
+
+  + Perhaps generalize to any vector space?  Talk about 'Envelope',
+    'Boundary', etc.?  Hmmm... maybe not.  They have quite different
+    purposes.
+
+* Related work
+
+  + lots of FRP stuff
+  + 'Semantic Design w/ Type Class Morphisms' from Conal
+  + Haskore(/Euterpea?)
+  + ChalkBoard

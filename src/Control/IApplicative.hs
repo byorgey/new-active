@@ -1,36 +1,33 @@
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE PolyKinds            #-}
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ConstraintKinds      #-}
-{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
-import           Prelude hiding (cycle, repeat, pure, (<*>))
-import qualified Prelude as P
-import GHC.Exts (Constraint)
+module Control.IApplicative where
+
+import           Data.Finitude
+
+import           GHC.Exts      (Constraint)
+import           Prelude       hiding (cycle, pure, repeat, (<*>))
+import qualified Prelude       as P
 
 class IFunctor (f :: k -> * -> *) where
   imap :: (a -> b) -> f i a -> f i b
 
 class IFunctor f => IApplicative (f :: k -> * -> *) where
-  type I :: k
+  type Id :: k
   type (:*:) (a :: k) (b :: k) :: k
-  ipure :: a -> f I a
+  ipure :: a -> f Id a
   (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
-
-data Finitude = Fin | Inf
-
-type family Isect (f1 :: Finitude) (f2 :: Finitude) :: Finitude where
-  Isect Fin f = Fin
-  Isect f Fin = Fin
-  Isect f g   = Inf
 
 newtype FList (f :: Finitude) (a :: *) = FList [a]
   deriving Show
@@ -38,17 +35,17 @@ newtype FList (f :: Finitude) (a :: *) = FList [a]
 instance IFunctor FList where
   imap f (FList xs) = FList (map f xs)
 
-cycle :: [a] -> FList Inf a
+cycle :: [a] -> FList I a
 cycle = FList . P.cycle
 
-repeat :: a -> FList Inf a
+repeat :: a -> FList I a
 repeat = FList . P.repeat
 
-fin :: [a] -> FList Fin a
+fin :: [a] -> FList F a
 fin as = length as `seq` (FList as)
 
 instance IApplicative FList where
-  type I = Inf
+  type Id = I
   type (:*:) i j = Isect i j
   ipure = repeat
   (FList fs) <:*> (FList xs) = FList (zipWith ($) fs xs)
@@ -88,7 +85,7 @@ instance IFunctor Vec where
   imap f (VInf a as)  = VInf (f a) (imap f as)
 
 instance IApplicative Vec where
-  type I = NInf
+  type Id = NInf
   type (:*:) m n = Min m n
   ipure a = VInf a (ipure a)
   VInf f fs <:*> VInf x xs = VInf (f x) (fs <:*> xs)
@@ -107,7 +104,7 @@ instance IFunctor List where
   imap f (List as) = List (fmap f as)
 
 instance IApplicative List where
-  type I = ()
+  type Id = ()
   type (:*:) i j = ()
   ipure = List . P.pure
   List fs <:*> List xs = List (fs P.<*> xs)
@@ -122,7 +119,7 @@ instance Functor f => IFunctor (Ix f) where
   imap f (Ix x) = Ix (fmap f x)
 
 instance Applicative f => IApplicative (Ix f) where
-  type I = ()
+  type Id = ()
   type (:*:) i j = ()
   ipure = Ix . P.pure
   Ix f <:*> Ix x = Ix (f P.<*> x)
@@ -163,7 +160,7 @@ instance Applicative f => Applicativey (f :: * -> *) (a :: *) (b :: *) i j where
 
 instance IApplicative f => Applicativey (f :: k -> * -> *) (a :: *) (b :: *) (i :: k) (j :: k) where
   type AppC f = IApplicative
-  type PureType f a b = a -> f I a
+  type PureType f a b = a -> f Id a
   type AppType f a b i j = f i (a -> b) -> f j a -> f (i :*: j) b
 
   pure = ipure

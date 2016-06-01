@@ -83,7 +83,7 @@ dur = Active Forever id
 (Active d1@(Duration n1) f1) ->> (Active d2 f2) = Active (addDuration d1 d2) f
   where
     f n | n <  n1   = f1 n
-        | n == n1   = f1 n <> f2 n
+        | n == n1   = f1 n <> f2 0
         | otherwise = f2 (n - n1)
 
 newtype Horiz n a = Horiz { getHoriz :: Active F n a }

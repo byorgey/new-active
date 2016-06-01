@@ -122,12 +122,16 @@ endVal (Active (Duration n) f) = f n
 
 ------------------------------------------------------------
 
--- stretch
--- stretchTo
--- during
--- backwards
+-- Functions that should be written:
 
--- snapshot?
+-- vertical, i.e. parallel composition
 
--- discrete
--- simulate
+-- stretch    -- stretch by a given factor
+-- stretchTo  -- stretch a finite Active to a specific duration
+-- during     -- stretch a finite Active to match the duration of another
+-- backwards  -- run a finite Active backwards
+
+-- snapshot   -- get a value at a specific time
+
+-- discrete   -- make an Active from a discrete list of values
+-- simulate   -- sample an Active to generate a list of values

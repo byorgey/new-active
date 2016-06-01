@@ -34,6 +34,7 @@ data Duration f n where
 instance Eq n => Eq (Duration f n) where
   Duration n1 == Duration n2 = n1 == n2
   Forever     == Forever     = True
+  _           == _           = False
 
 instance Num n => Num (Duration F n) where
   fromInteger               = toDuration . fromInteger

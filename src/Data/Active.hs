@@ -126,15 +126,15 @@ stretch t (Active (Duration n1) f1)
     | t > 0     = Active (Duration n2) f
     | otherwise = error "Can only stretch by rational numbers > 0"
     where
-      n2 = t * n1
+      n2   = t * n1
       f n  = f1 (n*t)
 
 
-{-backwards :: Active F n a -> Active F n a
-backwards (Active (Duration n1) f1) =  Active (Duration n2) f1
+backwards :: Num n => Active F n a -> Active F n a
+backwards (Active (Duration n1) f1) =  Active (Duration n1) f
       where
-        n2 = reverse n1
- -}       
+        f n =  f1 (n1 - n) -- i think this is fine
+        
 ------------------------------------------------------------
 
 -- Functions that should be written:
@@ -150,3 +150,6 @@ backwards (Active (Duration n1) f1) =  Active (Duration n2) f1
 
 -- discrete   -- make an Active from a discrete list of values
 -- simulate   -- sample an Active to generate a list of values
+
+-- runActive :: Active f n a -> n -> a
+-- extract a value at time t from Active

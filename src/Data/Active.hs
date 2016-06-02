@@ -135,6 +135,11 @@ backwards (Active (Duration n1) f1) =  Active (Duration n1) f
       where
         f n =  f1 (n1 - n) -- i think this is fine
         
+        
+runActive :: Ord n => Active f n a -> n -> a
+runActive (Active (Duration n1) a1) t
+    | t == n1   = a1 (t)
+    | otherwise = error "Need t == n1"
 ------------------------------------------------------------
 
 -- Functions that should be written:

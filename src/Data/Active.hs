@@ -86,7 +86,7 @@ dur = Active Forever id
         | n == n1   = f1 n <> f2 0
         | otherwise = f2 (n - n1)
 
-newtype Horiz n a = Horiz { getHoriz :: Active F n a }
+newtype Horiz n a = Horiz { getHoriz :: Active F n a } -- comment
 
 instance (Num n, Ord n, Semigroup a) => Semigroup (Horiz n a) where
   Horiz a1 <> Horiz a2 = Horiz (a1 ->> a2)

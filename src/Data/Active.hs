@@ -120,6 +120,21 @@ startVal (Active _ f) = f 0
 endVal :: Active F n a -> a
 endVal (Active (Duration n) f) = f n
 
+
+stretch :: (Num n, Ord n) => n -> Active F n a -> Active F n a
+stretch t (Active (Duration n1) f1)
+    | t > 0     = Active (Duration n2) f
+    | otherwise = error "Can only stretch by rational numbers > 0"
+    where
+      n2 = t * n1
+      f n  = f1 (n*t)
+
+
+{-backwards :: Active F n a -> Active F n a
+backwards (Active (Duration n1) f1) =  Active (Duration n2) f1
+      where
+        n2 = reverse n1
+ -}       
 ------------------------------------------------------------
 
 -- Functions that should be written:

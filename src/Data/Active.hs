@@ -129,32 +129,58 @@ stretch t (Active (Duration n1) f1)
       n2   = t * n1
       f n  = f1 (n*t)
 
-
 backwards :: Num n => Active F n a -> Active F n a
 backwards (Active (Duration n1) f1) =  Active (Duration n1) f
       where
         f n =  f1 (n1 - n) -- i think this is fine
-        
-        
+              
 runActive :: Ord n => Active f n a -> n -> a
 runActive (Active (Duration n1) a1) t
     | t == n1   = a1 (t)
     | otherwise = error "Need t == n1"
+
+matchDuration :: (Ord n, Num n) => Active F n a -> Active F n a -> Active F n a
+matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
+   | t1 < t2   = Active (Duration t3) a1
+   | t2 < t1   = Active (Duration t4) a2
+   where 
+     t3 = t1 + (t2 - t1)
+     t4 = t2 + (t1 - t2)    
+
+
+
+vertical :: (Num n, Ord n, Semigroup a) => Active f n a -> Active f n a -> Active f n a 
+vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
+    | t1 < t2    = (Active (Duration t1) g)
+    | t2 < t1    = (Active (Duration t2) h)
+     where 
+       g x = f1 (runActive (Active (Duration t2) f2) t2) --a1 (a2)
+       h y = f2 (runActive (Active (Duration t1) f1) t1) --a2 (a1)
+     
+
 ------------------------------------------------------------
 
 -- Functions that should be written:
 
--- vertical, i.e. parallel composition
+-- vertical, i.e. parallel composition                            semiDone
 
--- stretch    -- stretch by a given factor
+-- stretch    -- stretch by a given factor                         DONE
+
 -- stretchTo  -- stretch a finite Active to a specific duration
--- during     -- stretch a finite Active to match the duration of another
--- backwards  -- run a finite Active backwards
+-- specify to a certain length (lets say 5, find the factor that gets me there)
+
+-- matchDuration     -- stretch a finite Active to match the duration of another  DONE
+--like stretchTo, i want two actives to have same length, one length matches the other 
+
+-- backwards  -- run a finite Active backwards                     DONE
 
 -- snapshot   -- get a value at a specific time
+-- snapShot :: n -> Active f n a -> Active I n a
+-- returns an infitine active of constant value a. Not a single a value
 
 -- discrete   -- make an Active from a discrete list of values
+-- took a picture, list [1, 2, 3]
+
 -- simulate   -- sample an Active to generate a list of values
 
--- runActive :: Active f n a -> n -> a
--- extract a value at time t from Active
+-- runActive  -- extract a value at time t from Active             semiDone

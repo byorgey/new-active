@@ -120,7 +120,6 @@ startVal (Active _ f) = f 0
 endVal :: Active F n a -> a
 endVal (Active (Duration n) f) = f n
 
-
 stretch :: (Num n, Ord n) => n -> Active F n a -> Active F n a
 stretch t (Active (Duration n1) f1)
     | t > 0     = Active (Duration n2) f
@@ -139,23 +138,30 @@ runActive (Active (Duration n1) a1) t
     | t == n1   = a1 (t)
     | otherwise = error "Need t == n1"
 
-matchDuration :: (Ord n, Num n) => Active F n a -> Active F n a -> Active F n a
-matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
-   | t1 < t2   = Active (Duration t3) a1
-   | t2 < t1   = Active (Duration t4) a2
+truncateDuration :: (Ord n, Num n) => Active F n a -> Active F n a -> Active F n a
+truncateDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
+   | t1 < t2   = Active (Duration t1) a3
+   | t2 < t1   = Active (Duration t2) a4
    where 
-     t3 = t1 + (t2 - t1)
-     t4 = t2 + (t1 - t2)    
+     a3 x = a1 (t2-t1)
+     a4 x = a2 (t1-t2)   
+
+matchDuration :: (Ord n, Fractional n) => Active f n a -> Active f n a -> Active f n a
+matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
+    | (t1 < t2) && t1 > 0   = stretch x (Active (Duration t1) a1)
+    | (t2 < t1) && t2 > 0   = stretch x (Active (Duration t2) a2)
+    where
+      x = (t2 / t1)
+   
 
 
-
-vertical :: (Num n, Ord n, Semigroup a) => Active f n a -> Active f n a -> Active f n a 
+{- vertical :: (Num n, Ord n, Semigroup a) => Active f n a -> Active f n a -> Active f n a 
 vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
     | t1 < t2    = (Active (Duration t1) g)
     | t2 < t1    = (Active (Duration t2) h)
      where 
-       g x = f1 (runActive (Active (Duration t2) f2) t2) --a1 (a2)
-       h y = f2 (runActive (Active (Duration t1) f1) t1) --a2 (a1)
+       g x = f1 t2--(runActive (Active (Duration t2) f2) t2)
+       h y = f2 t1 --(runActive (Active (Duration t1) f1) t1) -}
      
 
 ------------------------------------------------------------
@@ -183,4 +189,4 @@ vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
 
 -- simulate   -- sample an Active to generate a list of values
 
--- runActive  -- extract a value at time t from Active             semiDone
+-- runActive  -- extract a value at time t from Active             Done

@@ -86,7 +86,7 @@ dur = Active Forever id
         | n == n1   = f1 n <> f2 0
         | otherwise = f2 (n - n1)
 
-newtype Horiz n a = Horiz { getHoriz :: Active F n a } -- comment
+newtype Horiz n a = Horiz { getHoriz :: Active F n a }
 
 instance (Num n, Ord n, Semigroup a) => Semigroup (Horiz n a) where
   Horiz a1 <> Horiz a2 = Horiz (a1 ->> a2)
@@ -131,31 +131,71 @@ stretch t (Active (Duration n1) f1)
 backwards :: Num n => Active F n a -> Active F n a
 backwards (Active (Duration n1) f1) =  Active (Duration n1) f
       where
-        f n =  f1 (n1 - n) -- i think this is fine
+        f n =  f1 (n1 - n) 
               
 runActive :: Ord n => Active f n a -> n -> a
 runActive (Active (Duration n1) a1) t
-    | t == n1   = a1 (t)
-    | otherwise = error "Need t == n1"
+    | t > n1 = error "t1 can't be bigger than n1"
+    | otherwise             = a1 (t)
+ --  | (0 < t  && t <= n1)   = a1 (t)
+ --  | otherwise             = error "Need t == n1"
 
 truncateDuration :: (Ord n, Num n) => Active F n a -> Active F n a -> Active F n a
 truncateDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
    | t1 < t2   = Active (Duration t1) a3
    | t2 < t1   = Active (Duration t2) a4
+   | otherwise = error "one Active has to be shorter than the other"
    where 
      a3 x = a1 (t2-t1)
      a4 x = a2 (t1-t2)   
 
-matchDuration :: (Ord n, Fractional n) => Active f n a -> Active f n a -> Active f n a
-matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
+matchShorter :: (Ord n, Fractional n) => Active f n a -> Active f n a -> Active f n a
+matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
     | (t1 < t2) && t1 > 0   = stretch x (Active (Duration t1) a1)
-    | (t2 < t1) && t2 > 0   = stretch x (Active (Duration t2) a2)
+    | (t2 < t1) && t2 > 0   = stretch y (Active (Duration t2) a2)
     where
       x = (t2 / t1)
-   
+      y = (t1 / t2)
+      
+matchDuration :: (Ord n, Fractional n, Num n) => Active f n a -> Active f n a -> Active f n a
+matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
+  if (t1 == t2)
+    then stretch 1 (Active (Duration t1) a1)
+    else stretch x (Active (Duration t1) a1)
+        where 
+          x = (t2*t2) / t1
+
+stretchTo :: (Ord n,  Fractional n) => n -> Active F n a -> Active F n a
+stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
+     where
+       x = n/t1
+
+discrete :: Num n => [Int] -> Active f n a
+discrete [] = error "Can't produce an Active without values"
+discrete (x:xs) = (Active (Duration t1) take 1 cycle (x:xs))
+-- use map
+   where
+     t1 = length [xs]
+     
+
+{- instance IApplicative f =>  --f i (a -> b) -> f j a -> f (i :*: b j) b
+  type Id = 
+  type PureType <**>
+  type AppC
+  type AppType
+  pure :: a -> f Id a 
 
 
-{- vertical :: (Num n, Ord n, Semigroup a) => Active f n a -> Active f n a -> Active f n a 
+
+instance IApplicative f => Applicativey (f :: k -> * -> *) (a :: *) (b :: *) (i :: k) (j :: k) where
+  type AppC f = IApplicative
+  type PureType f a b = a -> f Id a
+  type AppType f a b i j = f i (a -> b) -> f j a -> f (i :*: j) b
+
+  pure = ipure
+  (<*>) = (<:*>)
+
+vertical :: (Num n, Ord n, Semigroup a) => Active f n a -> Active f n a -> Active f n a 
 vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
     | t1 < t2    = (Active (Duration t1) g)
     | t2 < t1    = (Active (Duration t2) h)
@@ -168,14 +208,14 @@ vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
 
 -- Functions that should be written:
 
--- vertical, i.e. parallel composition                            semiDone
+-- vertical, i.e. parallel composition                            
 
 -- stretch    -- stretch by a given factor                         DONE
 
--- stretchTo  -- stretch a finite Active to a specific duration
+-- stretchTo  -- stretch a finite Active to a specific duration   DONE
 -- specify to a certain length (lets say 5, find the factor that gets me there)
 
--- matchDuration     -- stretch a finite Active to match the duration of another  DONE
+-- matchDuration     -- stretch a finite Active to match the duration of another    DONE
 --like stretchTo, i want two actives to have same length, one length matches the other 
 
 -- backwards  -- run a finite Active backwards                     DONE

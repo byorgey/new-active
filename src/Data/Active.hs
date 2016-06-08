@@ -137,8 +137,6 @@ runActive :: Ord n => Active f n a -> n -> a
 runActive (Active (Duration n1) a1) t
     | t > n1 = error "t1 can't be bigger than n1"
     | otherwise             = a1 (t)
- --  | (0 < t  && t <= n1)   = a1 (t)
- --  | otherwise             = error "Need t == n1"
 
 truncateDuration :: (Ord n, Num n) => Active F n a -> Active F n a -> Active F n a
 truncateDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
@@ -170,39 +168,22 @@ stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
      where
        x = n/t1
 
-discrete :: Num n => [Int] -> Active f n a
-discrete [] = error "Can't produce an Active without values"
-discrete (x:xs) = (Active (Duration t1) take 1 cycle (x:xs))
--- use map
+discrete :: (Fractional n, Ord n, Ord a, Fractional a) => [a] -> Active F n a
+discrete [] = error "Data.Active.discrete must be called with a non-empty list."
+discrete xs = (Active (Duration t1) f1)
    where
-     t1 = length [xs]
-     
+     f1 t
+        | t < (1/3)     = xs !! 0 
+        | t < (2/3)     = xs !! 1
+        | t <= 1        = xs !! 2 
+        | otherwise     = error "something"   
+     t1 = 3 
 
-{- instance IApplicative f =>  --f i (a -> b) -> f j a -> f (i :*: b j) b
-  type Id = 
-  type PureType <**>
-  type AppC
-  type AppType
-  pure :: a -> f Id a 
-
-
-
-instance IApplicative f => Applicativey (f :: k -> * -> *) (a :: *) (b :: *) (i :: k) (j :: k) where
-  type AppC f = IApplicative
-  type PureType f a b = a -> f Id a
-  type AppType f a b i j = f i (a -> b) -> f j a -> f (i :*: j) b
-
-  pure = ipure
-  (<*>) = (<:*>)
-
-vertical :: (Num n, Ord n, Semigroup a) => Active f n a -> Active f n a -> Active f n a 
-vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
-    | t1 < t2    = (Active (Duration t1) g)
-    | t2 < t1    = (Active (Duration t2) h)
-     where 
-       g x = f1 t2--(runActive (Active (Duration t2) f2) t2)
-       h y = f2 t1 --(runActive (Active (Duration t1) f1) t1) -}
-     
+snapshot :: (Num n, Fractional n) => n -> Active f n a -> Active f n a
+snapshot t (Active (Duration t1) f1) = Active (Duration t2) f2
+       where
+         t2   = (1/0)  -- infinity
+         f2 x = f1 (t)
 
 ------------------------------------------------------------
 
@@ -220,11 +201,11 @@ vertical (Active (Duration t1) f1) (Active (Duration t2) f2)
 
 -- backwards  -- run a finite Active backwards                     DONE
 
--- snapshot   -- get a value at a specific time
+-- snapshot   -- get a value at a specific time                   semiDone
 -- snapShot :: n -> Active f n a -> Active I n a
 -- returns an infitine active of constant value a. Not a single a value
 
--- discrete   -- make an Active from a discrete list of values
+-- discrete   -- make an Active from a discrete list of values    semiDone
 -- took a picture, list [1, 2, 3]
 
 -- simulate   -- sample an Active to generate a list of values

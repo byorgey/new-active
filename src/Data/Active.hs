@@ -157,11 +157,9 @@ matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
       
 matchDuration :: (Ord n, Fractional n, Num n) => Active f n a -> Active f n a -> Active f n a
 matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
-  if (t1 == t2)
-    then stretch 1 (Active (Duration t1) a1)
-    else stretch x (Active (Duration t1) a1)
+    stretch x (Active (Duration t1) a1)
         where 
-          x = (t2*t2) / t1
+          x = (t2*t1) / t1
 
 stretchTo :: (Ord n,  Fractional n) => n -> Active F n a -> Active F n a
 stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
@@ -170,23 +168,37 @@ stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
 
 discrete :: (Fractional n, Ord n, Ord a, Fractional a) => [a] -> Active F n a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
-discrete xs = (Active (Duration t1) f1)
+discrete xs = (Active 1 f1)
    where
      f1 t
-        | t < (1/3)     = xs !! 0 
-        | t < (2/3)     = xs !! 1
-        | t <= 1        = xs !! 2 
-        | otherwise     = error "something"   
-     t1 = 3 
+        | t <  (1/(fromIntegral(length xs)))  = xs !! 0
+        | t <  (2/(fromIntegral(length xs)))  = xs !! 1
+        | t <= (fromIntegral(length xs))      = xs !! 2
+        | otherwise             = error "something"   
 
-snapshot :: (Num n, Fractional n) => n -> Active f n a -> Active f n a
-snapshot t (Active (Duration t1) f1) = Active (Duration t2) f2
+snapshot :: (Num n, Fractional n) => n -> Active f n a -> Active I n a
+snapshot t (Active (Duration t1) f1) = Active Forever f2
        where
-         t2   = (1/0)  -- infinity
          f2 x = f1 (t)
 
-------------------------------------------------------------
 
+{-It samples the active value at a bunch of regularly spaced points.  
+The first parameter is the "frame rate", 
+which says how many samples to take per unit time.  For example, 
+
+simulate 5 (stretch 2 ui)
+
+will return a list of 11 values (5 per unit time makes 10,
+plus one at the very end), evenly spaced along (stretch 2 ui).  
+So the values will be [0, 0.1, 0.2, ... 1] -}
+       
+simulate :: (Ord n, Num n, Fractional n, Num a, Enum a) => n -> Active f n a -> [a]
+simulate 0 _ = error "Frame rate can't equal zero"
+simulate n (Active (Duration t1) a1) = [a1(t1), a1(t1+i) .. a1(s)]
+   where
+     s = (n * t1) + 1
+     i = 1/n          
+------------------------------------------------------------
 -- Functions that should be written:
 
 -- vertical, i.e. parallel composition                            

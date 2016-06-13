@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE KindSignatures    #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -60,6 +61,12 @@ addDuration :: Num n => Duration f1 n -> Duration f2 n -> Duration (Union f1 f2)
 addDuration Forever      _            = Forever
 addDuration (Duration _) Forever      = Forever
 addDuration (Duration a) (Duration b) = Duration (a + b)
+
+minDuration :: (Num n, Ord n) => Duration f1 n -> Duration f2 n -> Duration (Isect f1 f2) n
+minDuration Forever Forever = Forever --do we need this case? should it be an error?
+minDuration Forever (Duration b) = Duration b
+minDuration (Duration a) Forever = Duration a
+minDuration (Duration a) (Duration b) = Duration (minimum [a, b])
 
 -- could make ISemigroup, IMonoid classes...
 
@@ -159,7 +166,7 @@ matchDuration :: (Ord n, Fractional n, Num n) => Active f n a -> Active f n a ->
 matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
     stretch x (Active (Duration t1) a1)
         where 
-          x = (t2*t1) / t1
+          x = t2 / t1
 
 stretchTo :: (Ord n,  Fractional n) => n -> Active F n a -> Active F n a
 stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
@@ -168,36 +175,34 @@ stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
 
 discrete :: (Fractional n, Ord n, Ord a, Fractional a) => [a] -> Active F n a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
-discrete xs = (Active 1 f1)
-   where
-     f1 t
-        | t <  (1/(fromIntegral(length xs)))  = xs !! 0
-        | t <  (2/(fromIntegral(length xs)))  = xs !! 1
-        | t <= (fromIntegral(length xs))      = xs !! 2
-        | otherwise             = error "something"   
+discrete xs = f1 <$> ui --(Active 1 f1)
+     where
+       f1 t
+          | t == 1    = V.unsafeLast v
+          | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))  
+       v = V.fromList xs    
 
 snapshot :: (Num n, Fractional n) => n -> Active f n a -> Active I n a
 snapshot t (Active (Duration t1) f1) = Active Forever f2
        where
          f2 x = f1 (t)
 
-
-{-It samples the active value at a bunch of regularly spaced points.  
-The first parameter is the "frame rate", 
-which says how many samples to take per unit time.  For example, 
-
-simulate 5 (stretch 2 ui)
-
-will return a list of 11 values (5 per unit time makes 10,
-plus one at the very end), evenly spaced along (stretch 2 ui).  
-So the values will be [0, 0.1, 0.2, ... 1] -}
-       
 simulate :: (Ord n, Num n, Fractional n, Num a, Enum a) => n -> Active f n a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
 simulate n (Active (Duration t1) a1) = [a1(t1), a1(t1+i) .. a1(s)]
    where
      s = (n * t1) + 1
      i = 1/n          
+
+instance IApplicative (Active n) where
+  type Id = I
+  type (:*:) i j = Isect i j
+  -- ipure :: a -> f Id a
+  ipure a = Active Forever a1
+    where
+      a1 t = a (t) -- do we need constant value for t? a (1)
+  -- (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
+  (<:*>) (Active (Duration t1) a1) (Active (Duration t2) b) = Active (minDuration t1 t2) b
 ------------------------------------------------------------
 -- Functions that should be written:
 
@@ -213,13 +218,13 @@ simulate n (Active (Duration t1) a1) = [a1(t1), a1(t1+i) .. a1(s)]
 
 -- backwards  -- run a finite Active backwards                     DONE
 
--- snapshot   -- get a value at a specific time                   semiDone
+-- snapshot   -- get a value at a specific time                   Done
 -- snapShot :: n -> Active f n a -> Active I n a
 -- returns an infitine active of constant value a. Not a single a value
 
 -- discrete   -- make an Active from a discrete list of values    semiDone
 -- took a picture, list [1, 2, 3]
 
--- simulate   -- sample an Active to generate a list of values
+-- simulate   -- sample an Active to generate a list of values    DONE
 
 -- runActive  -- extract a value at time t from Active             Done

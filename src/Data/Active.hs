@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE KindSignatures    #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -61,6 +62,12 @@ addDuration Forever      _            = Forever
 addDuration (Duration _) Forever      = Forever
 addDuration (Duration a) (Duration b) = Duration (a + b)
 
+minDuration :: (Num n, Ord n) => Duration f1 n -> Duration f2 n -> Duration (Isect f1 f2) n
+minDuration Forever Forever = Forever --do we need this case? should it be an error?
+minDuration Forever (Duration b) = Duration b
+minDuration (Duration a) Forever = Duration a
+minDuration (Duration a) (Duration b) = Duration (minimum [a, b])
+
 -- could make ISemigroup, IMonoid classes...
 
 ------------------------------------------------------------
@@ -86,7 +93,7 @@ dur = Active Forever id
         | n == n1   = f1 n <> f2 0
         | otherwise = f2 (n - n1)
 
-newtype Horiz n a = Horiz { getHoriz :: Active F n a } -- comment
+newtype Horiz n a = Horiz { getHoriz :: Active F n a }
 
 instance (Num n, Ord n, Semigroup a) => Semigroup (Horiz n a) where
   Horiz a1 <> Horiz a2 = Horiz (a1 ->> a2)
@@ -120,33 +127,104 @@ startVal (Active _ f) = f 0
 endVal :: Active F n a -> a
 endVal (Active (Duration n) f) = f n
 
-
 stretch :: (Num n, Ord n) => n -> Active F n a -> Active F n a
 stretch t (Active (Duration n1) f1)
     | t > 0     = Active (Duration n2) f
     | otherwise = error "Can only stretch by rational numbers > 0"
     where
-      n2 = t * n1
+      n2   = t * n1
       f n  = f1 (n*t)
 
-
-{-backwards :: Active F n a -> Active F n a
-backwards (Active (Duration n1) f1) =  Active (Duration n2) f1
+backwards :: Num n => Active F n a -> Active F n a
+backwards (Active (Duration n1) f1) =  Active (Duration n1) f
       where
-        n2 = reverse n1
- -}       
-------------------------------------------------------------
+        f n =  f1 (n1 - n) 
+              
+runActive :: Ord n => Active f n a -> n -> a
+runActive (Active (Duration n1) a1) t
+    | t > n1 = error "t1 can't be bigger than n1"
+    | otherwise             = a1 (t)
 
+truncateDuration :: (Ord n, Num n) => Active F n a -> Active F n a -> Active F n a
+truncateDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
+   | t1 < t2   = Active (Duration t1) a3
+   | t2 < t1   = Active (Duration t2) a4
+   | otherwise = error "one Active has to be shorter than the other"
+   where 
+     a3 x = a1 (t2-t1)
+     a4 x = a2 (t1-t2)   
+
+matchShorter :: (Ord n, Fractional n) => Active f n a -> Active f n a -> Active f n a
+matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
+    | (t1 < t2) && t1 > 0   = stretch x (Active (Duration t1) a1)
+    | (t2 < t1) && t2 > 0   = stretch y (Active (Duration t2) a2)
+    where
+      x = (t2 / t1)
+      y = (t1 / t2)
+      
+matchDuration :: (Ord n, Fractional n, Num n) => Active f n a -> Active f n a -> Active f n a
+matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
+    stretch x (Active (Duration t1) a1)
+        where 
+          x = t2 / t1
+
+stretchTo :: (Ord n,  Fractional n) => n -> Active F n a -> Active F n a
+stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
+     where
+       x = n/t1
+
+discrete :: (Fractional n, Ord n, Ord a, Fractional a) => [a] -> Active F n a
+discrete [] = error "Data.Active.discrete must be called with a non-empty list."
+discrete xs = f1 <$> ui --(Active 1 f1)
+     where
+       f1 t
+          | t == 1    = V.unsafeLast v
+          | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))  
+       v = V.fromList xs    
+
+snapshot :: (Num n, Fractional n) => n -> Active f n a -> Active I n a
+snapshot t (Active (Duration t1) f1) = Active Forever f2
+       where
+         f2 x = f1 (t)
+
+simulate :: (Ord n, Num n, Fractional n, Num a, Enum a) => n -> Active f n a -> [a]
+simulate 0 _ = error "Frame rate can't equal zero"
+simulate n (Active (Duration t1) a1) = [a1(t1), a1(t1+i) .. a1(s)]
+   where
+     s = (n * t1) + 1
+     i = 1/n          
+
+instance IApplicative (Active n) where
+  type Id = I
+  type (:*:) i j = Isect i j
+  -- ipure :: a -> f Id a
+  ipure a = Active Forever a1
+    where
+      a1 t = a (t) -- do we need constant value for t? a (1)
+  -- (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
+  (<:*>) (Active (Duration t1) a1) (Active (Duration t2) b) = Active (minDuration t1 t2) b
+------------------------------------------------------------
 -- Functions that should be written:
 
--- vertical, i.e. parallel composition
+-- vertical, i.e. parallel composition                            
 
--- stretch    -- stretch by a given factor
--- stretchTo  -- stretch a finite Active to a specific duration
--- during     -- stretch a finite Active to match the duration of another
--- backwards  -- run a finite Active backwards
+-- stretch    -- stretch by a given factor                         DONE
 
--- snapshot   -- get a value at a specific time
+-- stretchTo  -- stretch a finite Active to a specific duration   DONE
+-- specify to a certain length (lets say 5, find the factor that gets me there)
 
--- discrete   -- make an Active from a discrete list of values
--- simulate   -- sample an Active to generate a list of values
+-- matchDuration     -- stretch a finite Active to match the duration of another    DONE
+--like stretchTo, i want two actives to have same length, one length matches the other 
+
+-- backwards  -- run a finite Active backwards                     DONE
+
+-- snapshot   -- get a value at a specific time                   Done
+-- snapShot :: n -> Active f n a -> Active I n a
+-- returns an infitine active of constant value a. Not a single a value
+
+-- discrete   -- make an Active from a discrete list of values    semiDone
+-- took a picture, list [1, 2, 3]
+
+-- simulate   -- sample an Active to generate a list of values    DONE
+
+-- runActive  -- extract a value at time t from Active             Done

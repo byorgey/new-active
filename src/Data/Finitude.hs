@@ -7,6 +7,7 @@ module Data.Finitude where
 data Finitude = F | I
 
 type family Isect (f1 :: Finitude) (f2 :: Finitude) :: Finitude where
+  Isect f f = f
   Isect F f = F
   Isect f F = F
   Isect f g = I

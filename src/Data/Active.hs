@@ -140,8 +140,8 @@ stretch t (Active (Duration n1) f1)
 backwards :: Num n => Active n F a -> Active n F a
 backwards (Active (Duration n1) f1) =  Active (Duration n1) f
       where
-        f n =  f1 (n1 - n) 
-              
+        f n =  f1 (n1 - n)
+
 runActive :: Ord n => Active n f a -> n -> a
 runActive (Active (Duration n1) a1) t
     | t > n1    = error "t1 can't be bigger than n1"
@@ -152,9 +152,9 @@ truncateDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
    | t1 < t2   = Active (Duration t1) a3
    | t2 < t1   = Active (Duration t2) a4
    | otherwise = error "one Active has to be shorter than the other"
-   where 
+   where
      a3 x = a1 (t2-t1)
-     a4 x = a2 (t1-t2)   
+     a4 x = a2 (t1-t2)
 
 matchShorter :: (Ord n, Fractional n) => Active n f a -> Active n f a -> Active n f a
 matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
@@ -163,11 +163,11 @@ matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
     where
       x = (t2 / t1)
       y = (t1 / t2)
-      
+
 matchDuration :: (Ord n, Fractional n, Num n) => Active n f a -> Active n f a -> Active n f a
 matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
     stretch x (Active (Duration t1) a1)
-        where 
+        where
           x = t2 / t1
 
 stretchTo :: (Ord n,  Fractional n) => n -> Active n F a -> Active n F a
@@ -181,8 +181,8 @@ discrete xs = (Active 1 f1)
      where
        f1 t
           | t == 1    = V.unsafeLast v
-          | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))  
-       v = V.fromList xs    
+          | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
+       v = V.fromList xs
 
 snapshot :: (Num n, Fractional n) => n -> Active n f a -> Active n I a
 snapshot t (Active (Duration t1) f1) = Active Forever f2

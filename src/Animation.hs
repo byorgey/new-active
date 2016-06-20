@@ -5,6 +5,8 @@
 {-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+module Animation where
+
 import           Diagrams.Core
 import           Diagrams.TrailLike
 
@@ -14,11 +16,11 @@ import           Data.Active
 import           Data.Finitude
 import           Data.Monoid
 
-type QAnimation b v n m = Active n F (QDiagram b v n m)
-type Animation b v n = QAnimation b v n Any
+type QAnimation t f b v n m = Active t f (QDiagram b v n m)
+type Animation t f b v n = QAnimation t f b v n Any
 
-type instance V (Active n f a) = V a
-type instance Diagrams.Core.N (Active n f a) = Diagrams.Core.N a
+type instance V (Active t f a) = V a
+type instance Diagrams.Core.N (Active t f a) = Diagrams.Core.N a
 
 instance HasOrigin a => HasOrigin (Active n f a) where
   moveOriginTo = imap . moveOriginTo

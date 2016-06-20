@@ -38,4 +38,12 @@ main = do
 
 ghc --make Test && ./Test && cd out && ffmpeg -i frame%03d.png -vcodec mpeg4 test.mov && open test.mov && cd ..
 
+
+
+f v1 v2 v3   -- function f applied to single values v1, v2, v3
+
+-- now suppose v1, v2, v3 are *animations*:
+
+f <:$> v1 <:*> v2 <:*> v3
+
 -}

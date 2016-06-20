@@ -189,14 +189,12 @@ snapshot t (Active (Duration t1) f1) = Active Forever f2
        where
          f2 x = f1 (t)
 
-simulate :: (Ord n, Num n, Fractional n, Num a, Enum a) => n -> Active n f a -> [a]
+-- TODO: extend this to work with infinite actives?
+simulate :: (Eq n, Num n, Fractional n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
-simulate n (Active (Duration t1) a1) = [a1(t1), a1(t1+i) .. a1(s)]
-   where
-     s = (n * t1) + 1
-     i = 1/n          
-  
-instance IApplicative (Active n) where
+simulate n (Active (Duration t1) a1) = map a1 [0, 1/n .. t1]
+
+instance (Num n, Ord n) => IApplicative (Active n) where
   type Id = I
   type (:*:) i j = Isect i j
   -- ipure :: a -> f Id a

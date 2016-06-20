@@ -1,8 +1,8 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE KindSignatures    #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE UndecidableInstances      #-}
 
 -----------------------------------------------------------------------------
@@ -196,42 +196,21 @@ simulate n (Active (Duration t1) a1) = [a1(t1), a1(t1+i) .. a1(s)]
      s = (n * t1) + 1
      i = 1/n          
   
-{- instance IApplicative (Active n) where
+instance IApplicative (Active n) where
   type Id = I
   type (:*:) i j = Isect i j
   -- ipure :: a -> f Id a
-  ipure a = Active Forever a
- -- do we need constant value for t? a (1)
+  ipure a = Active Forever f
+    where
+      f _ = a
+
   -- (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
-  (<:*>) (Active t1 a) (Active t2 b) = Active (minDuration t1 t2) a 
+  (<:*>) (Active t1 f1) (Active t2 f2) = Active (minDuration t1 t2) f3
+    where
+      f3 t = (f1 t) (f2 t)
 
 instance IFunctor (Active n) where
   -- imap :: (a -> b) -> f i a -> f i b
   imap f1 (Active d1 f2) = Active d1 f3
     where
-      f3 t = f1  (f2) -}
-------------------------------------------------------------
--- Functions that should be written:
-
--- vertical, i.e. parallel composition                            
-
--- stretch    -- stretch by a given factor                         DONE
-
--- stretchTo  -- stretch a finite Active to a specific duration   DONE
--- specify to a certain length (lets say 5, find the factor that gets me there)
-
--- matchDuration     -- stretch a finite Active to match the duration of another    DONE
---like stretchTo, i want two actives to have same length, one length matches the other 
-
--- backwards  -- run a finite Active backwards                     DONE
-
--- snapshot   -- get a value at a specific time                   Done
--- snapShot :: n -> Active f n a -> Active I n a
--- returns an infitine active of constant value a. Not a single a value
-
--- discrete   -- make an Active from a discrete list of values    Done
--- took a picture, list [1, 2, 3]
-
--- simulate   -- sample an Active to generate a list of values    DONE
-
--- runActive  -- extract a value at time t from Active             Done
+      f3 t = f1  (f2 (t))

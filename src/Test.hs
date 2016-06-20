@@ -36,3 +36,6 @@ main = do
 
 {-
 
+ghc --make Test && ./Test && cd out && ffmpeg -i frame%03d.png -vcodec mpeg4 test.mov && open test.mov && cd ..
+
+-}

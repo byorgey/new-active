@@ -200,14 +200,14 @@ instance IApplicative (Active n) where
   type Id = I
   type (:*:) i j = Isect i j
   -- ipure :: a -> f Id a
-  ipure f1 = Active Forever f2
+  ipure a = Active Forever f
     where
-      f2 t = f3 (t)
-      f3 x = f2 (x)
+      f _ = a
+
   -- (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
   (<:*>) (Active t1 f1) (Active t2 f2) = Active (minDuration t1 t2) f3
-    where 
-      f3 t = f1 (t)
+    where
+      f3 t = (f1 t) (f2 t)
 
 instance IFunctor (Active n) where
   -- imap :: (a -> b) -> f i a -> f i b

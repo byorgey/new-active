@@ -201,7 +201,6 @@ instance (Num n, Ord n) => IApplicative (Active n) where
   ipure a = Active Forever f
     where
       f _ = a
-
   -- (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
   (<:*>) (Active t1 f1) (Active t2 f2) = Active (minDuration t1 t2) f3
     where
@@ -212,3 +211,9 @@ instance IFunctor (Active n) where
   imap f1 (Active d1 f2) = Active d1 f3
     where
       f3 t = f1  (f2 (t))
+      
+instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
+  a1 <> a2 = (<>) <:$> a1 <:*> a2
+
+stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
+stack = sconcat . NE.fromList

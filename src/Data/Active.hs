@@ -4,6 +4,7 @@
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE UndecidableInstances      #-}
+{-# LANGUAGE TypeOperators             #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -88,6 +89,7 @@ interval a b = Active (toDuration (b - a)) (a+)
 dur :: Active n I n
 dur = Active Forever id
 
+infixr 4 ->>
 (->>) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 (Active d1@(Duration n1) f1) ->> (Active d2 f2) = Active (addDuration d1 d2) f
   where
@@ -162,7 +164,8 @@ matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
     | (t2 < t1) && t2 > 0   = stretch y (Active (Duration t2) a2)
     where
       x = (t2 / t1)
-      y = (t1 / t2)
+      y = (t1 / t2) 
+-- I think we need to get rid of matchShorter and truncateDuration.
 
 matchDuration :: (Ord n, Fractional n, Num n) => Active n f a -> Active n f a -> Active n f a
 matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
@@ -217,3 +220,7 @@ instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
 
 stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
 stack = sconcat . NE.fromList
+
+
+(<:>) :: (Semigroup a, Num n, Ord n) => Active n f1 a -> Active n f2 a -> Active n (f1 :*: f2) a
+a1 <:> a2 = (<>) <:$> a1 <:*> a2

@@ -14,3 +14,5 @@ TAGS
 /cabal.sandbox.config
 
 src/Test
+.DS_Store
+src/out

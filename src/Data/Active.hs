@@ -97,6 +97,13 @@ infixr 4 ->>
         | n == n1   = f1 n <> f2 0
         | otherwise = f2 (n - n1)
 
+infix 4 ->-
+(->-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
+(Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (addDuration d1 d2) f
+  where 
+    f n | n < n1     = f1 (n)
+        | n >= n1    = f1 n1 <> f2 (n - n1)
+
 newtype Horiz n a = Horiz { getHoriz :: Active n F a }
 
 instance (Num n, Ord n, Semigroup a) => Semigroup (Horiz n a) where
@@ -196,6 +203,7 @@ snapshot t (Active (Duration t1) f1) = Active Forever f2
 simulate :: (Eq n, Num n, Fractional n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
 simulate n (Active (Duration t1) a1) = map a1 [0, 1/n .. t1]
+simulate n (Active Forever a2) = map a2 [0, 1/n ..]
 
 instance (Num n, Ord n) => IApplicative (Active n) where
   type Id = I
@@ -220,7 +228,6 @@ instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
 
 stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
 stack = sconcat . NE.fromList
-
 
 (<:>) :: (Semigroup a, Num n, Ord n) => Active n f1 a -> Active n f2 a -> Active n (f1 :*: f2) a
 a1 <:> a2 = (<>) <:$> a1 <:*> a2

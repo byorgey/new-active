@@ -56,7 +56,15 @@ Replace activeTitle by the active you want to run, and you can always change the
 data Active :: * -> Finitude -> * -> * where
   Active   :: Duration f n -> (n -> a) -> Active n f a
 
-Actives, or animations, are dynamic diagrams that change over time. After you produce an animation, when it is compiling you will notice "Linking Test". This is the phase in which for each image produced (look inside your out folder) your PC is linking all these diagrams to produce a movie (.mov format).
+Actives, or animations, are dynamic values that change over time. A simple example of an active can be 
+a set of transformations for an object. Imagine having a point at the origin, we want to transform it
+to the coordinates (1,1). First we make a translation along the horizontal axis by value of 1. If I didn't 
+specify the direction, all you know is we're transforming the dot by a value of 1. Now I can alter my transformation
+by 90 degrees, and repeat the process. Since my translation changed over time, we can call it an active.
+
+Since the purpuse of this embedded domain specific language is animations, we can look at a more specific definition
+of actives. In this tutorial actives are dynamic diagrams that change over time.
+
 
 An Actives takes in two arguments:
  * A duration that the actives runs for. Durations are either finite or infinite
@@ -122,14 +130,8 @@ movingCircleV = (\t -> circle 0.25 # fc blue # translateY t) <:$> interval 0 1
 ----------------
 -- Stretch
 stretch :: (Num n, Ord n) => n -> Active n F a -> Active n F a
-stretch t (Active (Duration n1) f1)
-    | t > 0     = Active (Duration n2) f
-    | otherwise = error "Can only stretch by rational numbers > 0"
-    where
-      n2   = t * n1
-      f n  = f1 (n*t)
 
-stretch is a function that stretches the duration of an active to a fixed value. The function calculates the factor needed to extent the duration of the actives.
+stretch is a function that stretches an active by the given factor.
 
 Example:
 
@@ -140,14 +142,9 @@ stretchEx will shrink the duration of the active by a factor of (1/2). This func
 
 ----------------
 -- (->>)
-(->>) is a very important function in building actives. Understanding how it works is key to using it succefully. (Check addDuration in the library)
-
+(->>) is a very important function in building actives. Understanding how it works is key to using it succefully. 
 (->>) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
-(Active d1@(Duration n1) f1) ->> (Active d2 f2) = Active (addDuration d1 d2) f
-  where
-    f n | n <  n1   = f1 n
-        | n == n1   = f1 n <> f2 0
-        | otherwise = f2 (n - n1)
+
 
 (->>) allows the user to stitch one active with another active. It is a useful tool when you know the exact order in which the actives should run. Additionally, (->>) has infix 4, that means it has low precedence when compared with other operators (like . and #).
 
@@ -180,9 +177,6 @@ Exercise1: Make a circle move in a trianglular path.
 ----------------
 -- backwards
 backwards :: Num n => Active n F a -> Active n F a
-backwards (Active (Duration n1) f1) =  Active (Duration n1) f
-      where
-        f n =  f1 (n1 - n)
 
 backwards runs an active backwards (as the name suggests). To further understand backwards do the following:
  * Run circleCircle and watch the active produced
@@ -194,8 +188,6 @@ backwardsEx =  circleCircle ->> backwards circleCircle
 ----------------
 -- simulate
 simulate :: (Eq n, Num n, Fractional n, Enum n) => n -> Active n f a -> [a]
-simulate 0 _ = error "Frame rate can't equal zero"
-simulate n (Active (Duration t1) a1) = map a1 [0, 1/n .. t1]
 
 simulate takes in two arguments, number of frames and an active, 
 it produces a list of diagrams that can be linked together to make an animation, or movie. 
@@ -205,13 +197,12 @@ We use simulate in every animation.
 ----------------
 -- stretchTo
 stretchTo :: (Ord n,  Fractional n) => n -> Active n F a -> Active n F a
-stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
-     where
-       x = n/t1
 
-stretchTo is a function that allows you to stretch the duration of an active to a certain length. It is different from stretch (stretch is used in the implementation). 
+stretchTo is a function that allows you to stretch the duration of an active to a certain length. 
+It is different from stretch (stretch is used in the implementation). 
 It is a simple function to read and understand. It takes two arguments, 
-the length to which you want to stretch to, and the active to be stretched. Check how it is used in a simple example below.
+the length to which you want to stretch to, and the active to be stretched. 
+Check how it is used in a simple example below.
 
 stretchToEx :: A.Animation Double F Rasterific V2 Double
 stretchToEx = stretchTo (pi) circleCircle
@@ -221,12 +212,10 @@ stretchToEx takes the active circleCircle and changed its duration to pi, instea
 ----------------
 -- matchDuration
 matchDuration :: (Ord n, Fractional n, Num n) => Active n f a -> Active n f a -> Active n f a
-matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
-    stretch x (Active (Duration t1) a1)
-        where
-          x = t2 / t1
 
-matchDuration is a function that allows you to match the duration of any two actives. It is important to know the order in which actives are passed. It is very simple and convenient to use. Example below.
+matchDuration is a function that allows you to match the duration of any two actives. 
+It is important to know the order in which actives are passed. 
+It is very simple and convenient to use. Example below.
 
 matchDurationEx :: A.Animation Double F Rasterific V2 Double
 matchDurationEx = matchDuration stretchToEx stretchEx
@@ -234,7 +223,6 @@ matchDurationEx = matchDuration stretchToEx stretchEx
 ----------------
 -- stack
 stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
-stack = sconcat . NE.fromList
 
 stack is a simple function that lets you pass on a list of actives and it will run them all simultaneously. This is particularly useful when you want you don't want to write a single complicated active. You can break it down into pieces and stack them all together. Example below.
 
@@ -256,8 +244,6 @@ collision = (<>) <:$> stack [movingCircleY, movingCircleYO, movingCircleX, movin
 ----------------
 -- movie
 movie :: (Num n, Ord n, Semigroup a) => [Active n F a] -> Active n F a
-movie []     = error "Can't make empty movie!"
-movie (a:as) = sequenceNE (a :| as)
 
 movie is another simple function that takes in a list of two actives (TODO: only two?) and plays them in order. It is useful when you are making actives that are similar to each other and want to see specific differences. 
 
@@ -265,26 +251,8 @@ movieEx :: A.Animation Double F Rasterific V2 Double
 movieEx = movie [arrowsEx, arrowsEx2]
 
 ----------------
--- IApplicative instances
-instance (Num n, Ord n) => IApplicative (Active n) where
-  type Id = I
-  type (:*:) i j = Isect i j
-  ipure a = Active Forever f
-    where
-      f _ = a
-  (<:*>) (Active t1 f1) (Active t2 f2) = Active (minDuration t1 t2) f3
-    where
-      f3 t = (f1 t) (f2 t)
-
-These instance of IApplicative are two of the most essential parts of making actives. 
-ipure is used to produce infinite actives of constant value, like we saw in background. This can be useful when you need a non-constant actives combined with a cosntant active.
-
-(<:*>) is parallel composition of actives, i.e. it is a function that lets you run actives in parallel at the same time. (<:*>) uses the shorter duration of the two actives. circleCircle in Essential Actives is an example of how to use (<:*>).
-
-----------------
 -- (<:>)
 (<:>) :: (Semigroup a, Num n, Ord n) => Active n f1 a -> Active n f2 a -> Active n (f1 :*: f2) a
-a1 <:> a2 = (<>) <:$> a1 <:*> a2
 
 (<:>) lets you combine actives with different duration types (finite and infinite) together.
 It is useful when you're using ipure to run infinite actives, while building some other finite
@@ -319,12 +287,34 @@ instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
   a1 <> a2 = (<>) <:$> a1 <:*> a2
 
 (<>) is a slightly different from (<:>). (<>) runs actives of the same duration type together, 
-that is it runs only finite or infinite actives.
+that is it runs only finite or infinite actives. We used (<>) in circlecCircle and collision. 
+(<>) is usually accompnied by another operator <:$>, this operator maps a function onto the active.
 
-
+Note: remember that prefix operators take parenthesis, while infix operators do not.
 
 ----------------
-TODO: talk about (<>) and <:$>
+-- IApplicative instances
+instance (Num n, Ord n) => IApplicative (Active n) where
+  type Id = I
+  type (:*:) i j = Isect i j
+  ipure a = Active Forever f
+    where
+      f _ = a
+  (<:*>) (Active t1 f1) (Active t2 f2) = Active (minDuration t1 t2) f3
+    where
+      f3 t = (f1 t) (f2 t)
+
+These instance of IApplicative are two of the most essential parts of making actives. 
+ipure is used to produce infinite actives of constant value, like we saw in background. This can be useful when you need a non-constant actives combined with a cosntant active.
+
+(<:*>) is parallel composition of actives, i.e. it is a function that lets you run actives in parallel at the same time. (<:*>) uses the shorter duration of the two actives. circleCircle in Essential Actives is an example of how to use (<:*>).
+
+----------------
+
+TODO: fix and add example2 from Test.hs
+
+----------------
+
 
 
 ----------------
@@ -333,13 +323,38 @@ TODO: talk about (<>) and <:$>
 
 ----------------
 -- Combining actives
--- overlapping circle
+-- overlapping circles
 
-circleCircleBig =
- (translateX <:$> ((\x -> - cos x/2) <:$> interval 0 (4*pi)) <:*> (translateY <:$> ((\x -> - sin x/2) <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.5 # fc purple))))
+When you start thinking about building more intricate and complicated actives, I advise you to think about
+building pieces of the active seprately, then putting them together using tools at your disposal.
+By the end of this tutorial, we want to show you how to build a model of a solar system, with moons orbiting planets
+and planets orbiting the sun.
 
-overlapping :: A.Animation Double F Rasterific V2 Double
-overlapping = (<>) <:$> stack [circleCircle2, circleCircleBig] <:*> background
+Let's start by making a simple version of circles orbiting one another. I am going to use actives that
+we have used before. To make two circles orbit one another, they both need to move in a elliptical path.
+Standard parametric equations of an ellpise are: x = A cos(t), y = B sin(t).
+
+My first step will be using circleCircle2 and modifying it in a way that fits what I am trying to make.
+Guess and check works for finding values that yield simple orbital paths. 
+
+circleCircle2M :: A.Animation Double F Rasterific V2 Double
+circleCircle2M =
+  (translateX <:$> ((\x ->  2 * cos x) <:$> interval 0 (4*pi)) <:*> (translateY <:$> 
+  ((\x -> 1 * sin x) <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.15 # fc green))))  
+
+My second step is to modify equations of an ellipse to make my central circle (the sun) also move in an
+elliptical path, except I want its displacement to be small compared to circlecircle2M.
+
+circleCircleSun :: A.Animation Double F Rasterific V2 Double
+circleCircleSun =
+ (translateX <:$> ((\x -> - cos x/2) <:$> interval 0 (4*pi)) <:*> 
+ (translateY <:$> ((\x -> - sin x/2) <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.5 # fc orange))))
+
+Lastly, I want to combine all three using functions we've introduced. Keep in mind that none of the pieces
+should be connected with background, we want to connect ALL of them to the same background.
+
+rotating :: A.Animation Double F Rasterific V2 Double
+rotating = (<>) <:$> stack [circleCircle2, circleCircleSun, circleCircle2M] <:*> background
 
 
 

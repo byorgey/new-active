@@ -146,7 +146,12 @@ stretchEx will shrink the duration of the active by a factor of (1/2). This func
 (->>) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 
 
-(->>) allows the user to stitch one active with another active. It is a useful tool when you know the exact order in which the actives should run. Additionally, (->>) has infix 4, that means it has low precedence when compared with other operators (like . and #).
+(->>) allows the user to stitch one active with another active. 
+It is a useful tool when you know the exact order in which the actives should run. 
+Additionally, (->>) has infix 4, that means it has low precedence when compared with other operators 
+(like . and #). If you think of actives as continuous timelines, like |---|, then when you say
+Active 1 ->> Active 2, ->> operator connects the end point of the first active with the starting point
+of the second active ONLY. It does not connect any other points on the timelines.
 
 I want to make an animation that has a circle moving in the x direction, then in the y direction (at right angles).
 
@@ -166,13 +171,43 @@ When you want an active to combine actives in a certain sequence, you have to te
 There are two ways to fixing arrowsEx:
  1) Instead of making two separate actives, use either movingCircleH or movingCircleV with the correct transformations as follows:
 
-arrowsEx2 :: A.Animation Double F Rasterific V2 Double
-arrowsEx2 = (<>) <:$> (movingCircleH ->> 
+arrowsEx1 :: A.Animation Double F Rasterific V2 Double
+arrowsEx1 = (<>) <:$> (movingCircleH ->> 
           (movingCircleH # rotate (90 @@ deg) # translateX  1)) <:*> background
 
- 2) TODO: two separate ones combined (not working)
+ 2) The second method relies on building the horizontal and vertical transformations separately. This method,
+however, relies on another operator (->-) that we will introduce in the next section
 
 Exercise1: Make a circle move in a trianglular path.
+
+----------------
+-- (->-)
+(->-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
+To understand how (->-) operates, we need to look at Actives as timelines, just like we did in (->>),
+the difference is (->-) produces an active from combining values of the two existing actives. That means
+it evaluates both actives at all points (unlike ->>).
+
+Let's solve the problem we had in the last section, we already highlighted one way of solving it. This approach
+is a little different. The first step is to setup the transformations:
+
+xTrans :: Active Double F (T2 Double)
+xTrans = translationX <:$> interval 0 1
+
+yTrans :: Active Double F (T2 Double)
+yTrans = translationY <:$> interval 0 1
+
+Note the type signatures, as well as use of translationX instead of translateX. (TODO explain difference)
+xTrans and yTrans produce pure transformations of interval 1. Our next step is to combine them, this is when
+(->-) is useful. You can write (xTrans ->- yTrans) to connect the transformations in order.
+
+Lastly, we need to apply the combined transformation to the object we're transforming,
+in this case a blue circle of radius 0.25. To do so, we need to use the Haskell function transform.
+
+arrowsEx2 :: A.Animation Double F Rasterific V2 Double
+arrowsEx2 = transform <:$> (xTrans ->- yTrans) <:*> ipure(circle 0.25 # fc blue) <:> background
+
+arrowsEx applies transformations xTrans and yTrans to a circle on top of background. This active will produce
+the same animation as arrowsEx1.
 
 ----------------
 -- backwards
@@ -245,7 +280,7 @@ collision = (<>) <:$> stack [movingCircleY, movingCircleYO, movingCircleX, movin
 -- movie
 movie :: (Num n, Ord n, Semigroup a) => [Active n F a] -> Active n F a
 
-movie is another simple function that takes in a list of two actives (TODO: only two?) and plays them in order. It is useful when you are making actives that are similar to each other and want to see specific differences. 
+movie is another simple function that takes in a list of actives and plays them in order. It is useful when you are making actives that are similar to each other and want to see specific differences. 
 
 movieEx :: A.Animation Double F Rasterific V2 Double
 movieEx = movie [arrowsEx, arrowsEx2]
@@ -311,15 +346,32 @@ ipure is used to produce infinite actives of constant value, like we saw in back
 
 ----------------
 
-TODO: fix and add example2 from Test.hs
-
-----------------
-
-
 
 ----------------
 
 -- How to build complicated actives?
+
+----------------
+-- Type signature of actives
+exActive :: A.Animation Double F Rasterific V2 Double
+
+So far we've seen a type signature similar to that of exActive. Before we dive into more complicated
+actives, we need to understand the meaning of each term. 
+
+A.Animation:
+
+Double:
+
+F/I: This is the part where you specify if your active is finite of infinite. Infinite actives are linked
+to ipure. If you want to make a nonchanging rectangle you can say something like: ipure(rect 2 1 # fc blue)
+
+Rasterific: This has to do with the backend operations
+
+V2:
+
+Double:
+
+TODO: Talk about type signature of actives
 
 ----------------
 -- Combining actives
@@ -356,12 +408,47 @@ should be connected with background, we want to connect ALL of them to the same 
 rotating :: A.Animation Double F Rasterific V2 Double
 rotating = (<>) <:$> stack [circleCircle2, circleCircleSun, circleCircle2M] <:*> background
 
+While building a solar system is our goal from this tutorial, 
+the example we just developed could be improved. Just hang tight.
 
+----------------
+-- dur
+Our last example took too much work, now we want to make life easier. Even though splitting actives into
+smaller pieces then combining them is the best appraoch to more complicated actives, it is still inconvenient 
+to have to specify the interval for each piece. Giving the pieces infinite intervals simplifies this process.
 
+dur :: Active n I n
 
+dur is a very simple function that gives actives infinite intervals. A simple example is having a circle
+moving in some path. The following is a perfectly good example that you SHOULD NOT attempt.
 
+durEx :: A.Animation Double I Rasterific V2 Double
+durEx = (translateX <:$> ((\t -> cos (t/2)) <:$> dur) <:*> (translateY <:$> 
+  ((\t -> cos (3*t/2))<:$> dur) <:*> (ipure (circle 0.25 # fc black))) <:> background)
 
+durEx will compile, but it will also produce an infinite number of frames (don't believe me check your out directory).
+The reason I have this example is that I want you to realize the importance of stiching pieces together. <:$> dur can be
+a very useful tool if you know how to use it. We still want to make
+a solar system, we will be using <:$> dur in doing so.
 
+----------------
+-- cut TODO: FIX
+cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
+
+cut is a simple function that allows you to cut (or stop) an animation at any point shorter than the duration of an active.
+This is useful when you are trying to look at specific instances of an active. Follow the example below:
+
+blackRect :: A.Animation Double F Rasterific V2 Double
+blackRect = (\t -> rect 2 2 # fc black # translateX t) <:$> interval 0 2
+
+movingRect :: A.Animation Double F Rasterific V2 Double
+movingRect = (<>) <:$> blackRect <:*> ipure (rect 4 2 # translateX 1 # fc white)
+
+Run movingRect. What did you see? Now change your main to: let frames = simulate 30 (cut 1 movingRect)
+
+Notice the difference?
+
+----------------
 
 -}
 

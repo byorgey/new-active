@@ -199,7 +199,6 @@ snapshot t (Active (Duration t1) f1) = Active Forever f2
        where
          f2 x = f1 (t)
 
--- TODO: extend this to work with infinite actives?
 simulate :: (Eq n, Num n, Fractional n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
 simulate n (Active (Duration t1) a1) = map a1 [0, 1/n .. t1]
@@ -231,3 +230,14 @@ stack = sconcat . NE.fromList
 
 (<:>) :: (Semigroup a, Num n, Ord n) => Active n f1 a -> Active n f2 a -> Active n (f1 :*: f2) a
 a1 <:> a2 = (<>) <:$> a1 <:*> a2
+
+
+cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
+cut 0  _                        = error "You can only use cut for values > 0"
+cut c (Active (Duration t1) f1) = (Active (Duration t1) f1)
+  where
+    t2 | c <= t1   = c
+       | otherwise = error "can't use cut with value greater than duration"
+
+
+

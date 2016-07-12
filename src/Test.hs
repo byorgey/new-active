@@ -11,11 +11,11 @@ import           Data.Finitude
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Prelude            hiding (interval, simulate, ui, (->>),
                                              backwards, stretchTo, stretch,
-                                             runActive, snapshot, movie, imap)
+                                             runActive, snapshot, movie, imap, Active)
 
 
 background :: A.Animation Double I Rasterific V2 Double
-background = (ipure (rect 6 6 # fc white))
+background = (ipure (rect 15 15 # fc white))
 
 ------------------
 movingCircle' :: A.Animation Double F Rasterific V2 Double
@@ -95,21 +95,29 @@ movingCircleUP :: A.Animation Double F Rasterific V2 Double
 movingCircleUP = (<>) <:$> movingCircleV <:*> background
 
 arrowsEx :: A.Animation Double F Rasterific V2 Double
-arrowsEx = movingCircleRight ->> (movingCircleUP # translateX 2)
+arrowsEx = (<>) <:$> (movingCircle'->- movingCircleV) <:*> background
 
-arrowsEx2 :: A.Animation Double F Rasterific V2 Double
-arrowsEx2 = (<>) <:$> (movingCircle' ->> 
+arrowsEx1 :: A.Animation Double F Rasterific V2 Double
+arrowsEx1 = (<>) <:$> (movingCircle' ->> 
           (movingCircle' # rotate (90 @@ deg) # translateX  1)) <:*> background
 
+xTrans :: Active Double F (T2 Double)
+xTrans = translationX <:$> interval 0 1
+
+yTrans :: Active Double F (T2 Double)
+yTrans = translationY <:$> interval 0 1
+
+arrowsEx2 :: A.Animation Double F Rasterific V2 Double
+arrowsEx2 = transform <:$> (xTrans ->- yTrans) <:*> ipure(circle 0.25 # fc blue) <:> background
 ------------------
 -- runActive
 --runActiveEx :: A.Animation Double F Rasterific V2 Double
---runActiveEx = runActive circleCircle (0.5)
+--runActiveEx = runActive circleCircle (2)
 
 ------------------
 -- movie
 movieEx :: A.Animation Double F Rasterific V2 Double
-movieEx = movie [arrowsEx, arrowsEx2] -- only works for two elements
+movieEx = movie [arrowsEx, arrowsEx2, circleCircle] -- only works for two elements
 
 ------------------
 -- stack
@@ -131,23 +139,87 @@ collision = (<>) <:$> stack [movingCircleY, movingCircleYO, movingCircle1, movin
 -- TODO: make examples for ui, interval, dur, startVal, endVal, fix runActiveEx, discrete, fix snapshotEx
 ------------------
 -- <:>
-example :: A.Animation Double F Rasterific V2 Double
-example = circleCircle <:> circleTriangle <:> collision
--- compiles and runs, but not correctly!
+combine :: A.Animation Double F Rasterific V2 Double
+combine = circleCircle2 <:> collision
+
+example3 :: A.Animation Double F Rasterific V2 Double
+example3 = circleCircle <:> collision
 
 ------------------
 -- a1 <> a2
 example2 :: A.Animation Double F Rasterific V2 Double
 example2 = circleCircle <> circleTriangle <> collision
--- produced same animation as example, talk about diference between them
+
 
 ------------------
 -- imap example?
 
+
+------------------
+-- overlapping circle
+circleCircle2 :: A.Animation Double F Rasterific V2 Double
+circleCircle2 =
+  (translateX <:$> (cos <:$> interval 0 (4*pi)) <:*> (translateY <:$> 
+  (sin <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.25 # fc purple))))
+  
+circleCircle2M :: A.Animation Double F Rasterific V2 Double
+circleCircle2M =
+  (translateX <:$> ((\x ->  2 * cos x) <:$> interval 0 (4*pi)) <:*> (translateY <:$> 
+  ((\x -> 1 * sin x) <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.15 # fc green))))  
+
+circleCircleSun :: A.Animation Double F Rasterific V2 Double
+circleCircleSun =
+ (translateX <:$> ((\x -> - cos x/2) <:$> interval 0 (4*pi)) <:*> 
+ (translateY <:$> ((\x -> - sin x/2) <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.5 # fc orange))))
+
+rotating :: A.Animation Double F Rasterific V2 Double
+rotating = (<>) <:$> stack [circleCircle2, circleCircleSun, circleCircle2M] <:*> background
+------------------
+-- solar system
+earth :: A.Animation Double I Rasterific V2 Double
+earth = ipure(circle 0.3 # fc blue)
+
+moon :: A.Animation Double I Rasterific V2 Double
+moon =    (translateX <:$> ((\x -> cos (x/2)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> sin (x/2))<:$> dur) <:*> (ipure (circle 0.25 # fc black))))
+  
+sun :: A.Animation Double I Rasterific V2 Double
+sun =
+ (translateX <:$> ((\x -> - cos x/4) <:$> dur) <:*> 
+ (translateY <:$> ((\x -> - sin x/4) <:$> dur) <:*> (ipure (circle 0.5 # fc orange))))
+
+earthwM :: A.Animation Double I Rasterific V2 Double
+earthwM = (<>) <:$> earth <:*> moon
+
+solar1 :: A.Animation Double I Rasterific V2 Double
+solar1 = (translateX <:$> ((\x -> 2 * cos x) <:$> dur) <:*> 
+         (translateY <:$> ((\x -> 2 * sin x) <:$> dur) <:*> 
+         (earthwM)) <:> sun <:> background)
+         
+         
+----------------
+-- overlapping rectangles
+blackRect :: A.Animation Double F Rasterific V2 Double
+blackRect = (\t -> rect 2 2 # fc black # translateX t) <:$> interval 0 2
+
+movingRect :: A.Animation Double F Rasterific V2 Double
+movingRect = (<>) <:$> blackRect <:*> ipure (rect 4 2 # translateX 1 # fc white)
+
+------------------
+-- dur 
+durEx :: A.Animation Double I Rasterific V2 Double
+durEx =    (translateX <:$> ((\x -> cos (x/2)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> cos (x/2))<:$> dur) <:*> (ipure (circle 0.25 # fc black))) <:> background)
+  
+------------------
+-- cut
+cutEx :: A.Animation Double F Rasterific V2 Double
+cutEx = cut (1) movingRect
+
 ------------------
 main :: IO ()
 main = do
-  let frames = simulate 30 example2
+  let frames = simulate 30 cutEx
   forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
     renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame
 

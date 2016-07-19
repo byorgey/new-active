@@ -233,11 +233,8 @@ a1 <:> a2 = (<>) <:$> a1 <:*> a2
 
 
 cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
-cut 0  _                        = error "You can only use cut for values > 0"
+cut c (Active Forever f) = Active (Duration c) f
 cut c (Active (Duration t1) f1) = (Active (Duration t2) f1)
   where
     t2 | c <= t1   = c
-       | otherwise = error "can't use cut with value greater than duration"
-
-
-
+       | otherwise = t1

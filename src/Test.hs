@@ -15,7 +15,16 @@ import           Diagrams.Prelude            hiding (interval, simulate, ui, (->
 
 
 background :: A.Animation Double I Rasterific V2 Double
-background = (ipure (rect 15 15 # fc white))
+background = (ipure (rect 55 35 # fc white))
+
+orbit :: (Num n, Ord n, Num a) => Double -> Double -> Double -> Active n I a -> Active n I a
+orbit xT yT (Active time f1) = 
+           (translateX <:$> ((\c -> xT * cos (c)) <:$> dur) <:*>
+           (translateY <:$> ((\c -> yT * sin (c)) <:$> dur) <:*>
+           (Active time f1)) )
+           
+orbitEx :: A.Animation Double I Rasterific V2 Double
+orbitEx = orbit (2 3 circleCircle)
 
 ------------------
 movingCircle' :: A.Animation Double F Rasterific V2 Double
@@ -158,6 +167,7 @@ example2 = circleCircle <> circleTriangle <> collision
 ------------------
 -- overlapping circle
 circleCircle2 :: A.Animation Double F Rasterific V2 Double
+-- Double: time, F: time, RAsterific: backend rendering, V2: 2D diagrams Double: displacement
 circleCircle2 =
   (translateX <:$> (cos <:$> interval 0 (4*pi)) <:*> (translateY <:$> 
   (sin <:$> interval 0 (4*pi)) <:*> (ipure (circle 0.25 # fc purple))))
@@ -174,29 +184,7 @@ circleCircleSun =
 
 rotating :: A.Animation Double F Rasterific V2 Double
 rotating = (<>) <:$> stack [circleCircle2, circleCircleSun, circleCircle2M] <:*> background
-------------------
--- solar system
-earth :: A.Animation Double I Rasterific V2 Double
-earth = ipure(circle 0.3 # fc blue)
 
-moon :: A.Animation Double I Rasterific V2 Double
-moon =    (translateX <:$> ((\x -> cos (x/2)) <:$> dur) <:*> (translateY <:$> 
-  ((\x -> sin (x/2))<:$> dur) <:*> (ipure (circle 0.25 # fc black))))
-  
-sun :: A.Animation Double I Rasterific V2 Double
-sun =
- (translateX <:$> ((\x -> - cos x/4) <:$> dur) <:*> 
- (translateY <:$> ((\x -> - sin x/4) <:$> dur) <:*> (ipure (circle 0.5 # fc orange))))
-
-earthwM :: A.Animation Double I Rasterific V2 Double
-earthwM = (<>) <:$> earth <:*> moon
-
-solar1 :: A.Animation Double I Rasterific V2 Double
-solar1 = (translateX <:$> ((\x -> 2 * cos x) <:$> dur) <:*> 
-         (translateY <:$> ((\x -> 2 * sin x) <:$> dur) <:*> 
-         (earthwM)) <:> sun <:> background)
-         
-         
 ----------------
 -- overlapping rectangles
 blackRect :: A.Animation Double F Rasterific V2 Double
@@ -214,14 +202,117 @@ durEx =    (translateX <:$> ((\x -> cos (x/2)) <:$> dur) <:*> (translateY <:$>
 ------------------
 -- cut
 cutEx :: A.Animation Double F Rasterific V2 Double
-cutEx = cut (1) movingRect
+cutEx = cut (3) solarSystem
 
+
+------------------
+-- solar system
+earth :: A.Animation Double I Rasterific V2 Double
+earth = ipure(circle 0.5 # fc blue)
+
+moon :: A.Animation Double I Rasterific V2 Double
+moon =    (translateX <:$> ((\x -> 0.7 * cos (3*x/2)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> 0.7 * sin (3*x/2))<:$> dur) <:*> (ipure (circle 0.1 # fc green # lc red))))
+
+moon2 :: A.Animation Double I Rasterific V2 Double
+moon2 =    (translateX <:$> ((\x -> 0.7 * cos (2*x)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> 0.7 * sin (2*x))<:$> dur) <:*> (ipure (circle 0.1 # fc green # lc red))))
+  
+moon3 :: A.Animation Double I Rasterific V2 Double
+moon3 =    (translateX <:$> ((\x -> 0.2 * cos (2*x)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> 0.2 * sin (2*x))<:$> dur) <:*> (ipure (circle 0.1 # fc green))))  
+
+mercury :: A.Animation Double I Rasterific V2 Double
+mercury = ipure(circle 0.25 # fc pink)
+
+venus :: A.Animation Double I Rasterific V2 Double
+venus = ipure(circle 0.45 # fc purple)
+
+mars :: A.Animation Double I Rasterific V2 Double
+mars = ipure(circle 0.35 # fc deeppink)
+
+jupiter :: A.Animation Double I Rasterific V2 Double
+jupiter = ipure(circle 1 # fc peachpuff)
+
+saturn :: A.Animation Double I Rasterific V2 Double
+saturn = ipure(circle 0.85 # fc navajowhite)
+
+uranus :: A.Animation Double I Rasterific V2 Double
+uranus = ipure(circle 0.7 # fc deepskyblue)
+
+neptune :: A.Animation Double I Rasterific V2 Double
+neptune = ipure(circle 0.65 # fc dodgerblue)
+
+pluto :: A.Animation Double I Rasterific V2 Double
+pluto = ipure(circle 0.15 # fc yellow # lc pink)
+  
+sun :: A.Animation Double I Rasterific V2 Double
+sun =
+ (translateX <:$> ((\x -> - cos x/4) <:$> dur) <:*> 
+ (translateY <:$> ((\x -> - sin x/4) <:$> dur) <:*> (ipure (circle 1.5 # fc orange))))
+ 
+sun2 :: A.Animation Double I Rasterific V2 Double
+sun2 = (translateX (- 0.5) <:$> ipure(circle 1.4 # fc orange))
+
+earthwM :: A.Animation Double I Rasterific V2 Double
+earthwM = (<>) <:$> earth <:*> moon
+
+marswM :: A.Animation Double I Rasterific V2 Double
+marswM =(<>) <:$> mars <:*> moon2 
+
+solarSystem :: A.Animation Double I Rasterific V2 Double
+solarSystem = (translateX <:$> ((\x -> (2.15) * cos (8*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (2.15) * sin (8*x)) <:$> dur) <:*>
+         (mercury)) ) <:>
+         
+         (translateX <:$> ((\x -> (3.70) * cos (6.7*x)) <:$> dur) <:*> 
+         (translateY <:$> ((\x -> (2.65) * sin (6.7*x)) <:$> dur) <:*> 
+         (venus))  ) <:>
+         
+         (translateX <:$> ((\x -> (5.80) * cos (6*x)) <:$> dur) <:*> 
+         (translateY <:$> ((\x -> (3.50) * sin (6*x)) <:$> dur) <:*> 
+         (earthwM) ) <:>
+         
+         (translateX <:$> ((\x -> (8.00) * cos (5*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (4.45) * sin (5*x)) <:$> dur) <:*>
+         (marswM)  ) <:>
+         
+         (translateX <:$> ((\x -> (12.2) * cos (4*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (5.75) * sin (4*x)) <:$> dur) <:*>
+         (jupiter)) ) <:>
+         
+         (translateX <:$> ((\x -> (16.2) * cos (3*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (7.35) * sin (3*x)) <:$> dur) <:*>
+         (saturn))  ) <:>
+         
+         (translateX <:$> ((\x -> (20.5) * cos (2*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (9.20) * sin (2*x)) <:$> dur) <:*>
+         (uranus))  ) <:>
+         
+         (translateX <:$> ((\x -> (24.0) * cos (1*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (10.7) * sin (1*x)) <:$> dur) <:*>
+         (neptune)) ) <:>
+         
+         (translateX <:$> ((\x -> (27.0) * cos (0.8*x)) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (12.5) * sin (0.8*x)) <:$> dur) <:*>
+         (pluto))  ) <:> sun2) )
+
+ 
 ------------------
 main :: IO ()
 main = do
-  let frames = simulate 30 cutEx
+  let frames = simulate 25 (cut 15 orbitEx)
   forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
-    renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame
+    renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame 
+  {- pic <- loadImageEmb "stars.jpg"
+  case pic of
+    Left st -> putStrLn st
+    Right img -> do
+        let background2 ::  Diagram B
+            background2 =  image img # sized (mkWidth 55) 
+            frames = simulate 25 (cut 20  solarSystem <:> ipure(background2)) 
+        forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
+          renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame -}
 
 {-
 

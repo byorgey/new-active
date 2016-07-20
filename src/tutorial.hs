@@ -44,11 +44,11 @@ Lastly, before you can run any actives, you need the following chunk of code too
 
 main :: IO ()
 main = do
-  let frames = simulate 30 activeTitle
+  let frames = simulate 25 activeTitle
   forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
     renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame
 
-Replace activeTitle by the active you want to run, and you can always change the number of frames for simulate. It is set to 30 now, but feel free to change it to any non-zero value.
+Replace activeTitle by the active you want to run, and you can always change the number of frames for simulate (25 is standard for rasterific in diagrams). It is set to 30 now, but feel free to change it to any non-zero value.
 
 ----------------
 -- What are Actives and how do they work?
@@ -196,7 +196,8 @@ xTrans = translationX <:$> interval 0 1
 yTrans :: Active Double F (T2 Double)
 yTrans = translationY <:$> interval 0 1
 
-Note the type signatures, as well as use of translationX instead of translateX. (TODO explain difference)
+Note the type signatures, as well as use of translationX instead of translateX. translateX is a function,
+while translationX is of type transformation (for more details go to: http://hackage.haskell.org/package/diagrams-lib-1.3.1.3/docs/Diagrams-TwoD-Transform.html#v:translationX)
 xTrans and yTrans produce pure transformations of interval 1. Our next step is to combine them, this is when
 (->-) is useful. You can write (xTrans ->- yTrans) to connect the transformations in order.
 
@@ -346,9 +347,6 @@ ipure is used to produce infinite actives of constant value, like we saw in back
 
 ----------------
 
-
-----------------
-
 -- How to build complicated actives?
 
 ----------------
@@ -356,22 +354,20 @@ ipure is used to produce infinite actives of constant value, like we saw in back
 exActive :: A.Animation Double F Rasterific V2 Double
 
 So far we've seen a type signature similar to that of exActive. Before we dive into more complicated
-actives, we need to understand the meaning of each term. 
+actives, we need to understand the meaning of each term (in order). 
 
-A.Animation:
+A.Animation: to identify animations
 
-Double:
+Double: Is for the duration of the active
 
 F/I: This is the part where you specify if your active is finite of infinite. Infinite actives are linked
 to ipure. If you want to make a nonchanging rectangle you can say something like: ipure(rect 2 1 # fc blue)
 
-Rasterific: This has to do with the backend operations
+Rasterific: This has to do with the backend rendering process. Rasterific produces a .png for each frame
 
-V2:
+V2: Two deimensional diagrams and actives
 
-Double:
-
-TODO: Talk about type signature of actives
+Double: displacement within the diagram, change of coordinates from initial to final position for each frame.
 
 ----------------
 -- Combining actives
@@ -432,7 +428,7 @@ a very useful tool if you know how to use it. We still want to make
 a solar system, we will be using <:$> dur in doing so.
 
 ----------------
--- cut TODO: FIX
+-- cut
 cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
 
 cut is a simple function that allows you to cut (or stop) an animation at any point shorter than the duration of an active.
@@ -449,6 +445,104 @@ Run movingRect. What did you see? Now change your main to: let frames = simulate
 Notice the difference?
 
 ----------------
+-- Building a solar system
+
+In this section of the tutorial we are going to focus on using all of the pieces we have introduced, in making
+a solar system. As we progress, we are going to be using actives called solar1, solar2, ... 
+The idea is every time we add a planet we changeto the system, we make a new active that accomodates it.
+
+The best approach is to make each planet using ipure, then applying any transformations and translations. 
+Let's start by making all of our planets and sun:
+
+earth :: A.Animation Double I Rasterific V2 Double
+earth = ipure(circle 0.5 # fc blue)
+
+mercury :: A.Animation Double I Rasterific V2 Double
+mercury = ipure(circle 0.25 # fc pink)
+
+venus :: A.Animation Double I Rasterific V2 Double
+venus = ipure(circle 0.45 # fc purple)
+
+mars :: A.Animation Double I Rasterific V2 Double
+mars = ipure(circle 0.35 # fc deeppink)
+
+jupiter :: A.Animation Double I Rasterific V2 Double
+jupiter = ipure(circle 1 # fc peachpuff)
+
+saturn :: A.Animation Double I Rasterific V2 Double
+saturn = ipure(circle 0.85 # fc green)--fc navajowhite)
+
+uranus :: A.Animation Double I Rasterific V2 Double
+uranus = ipure(circle 0.7 # fc deepskyblue)
+
+neptune :: A.Animation Double I Rasterific V2 Double
+neptune = ipure(circle 0.65 # fc dodgerblue)
+
+pluto :: A.Animation Double I Rasterific V2 Double
+pluto = ipure(circle 0.15 # fc yellow)
+ 
+sun :: A.Animation Double I Rasterific V2 Double
+sun = ipure (circle 1.4 # fc orange) 
+
+For all the colors available go to http://hackage.haskell.org/package/colour-2.3.3/docs/Data-Colour-Names.html
+
+Our second step is to make and add a moon to earth (and other planets). You might think you can use <:> in solar1
+to apply translations to the moon and earth, but a better approach is to make earth with moon as one active, 
+then apply transformations to that active.
+
+moon :: A.Animation Double I Rasterific V2 Double
+moon =    (translateX <:$> ((\x -> 0.7 * cos (3*x/2)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> 0.7 * sin (3*x/2))<:$> dur) <:*> (ipure (circle 0.1 # fc green # lc red))))
+
+earthwM :: A.Animation Double I Rasterific V2 Double
+earthwM = (<>) <:$> earth <:*> moon
+
+marswM :: A.Animation Double I Rasterific V2 Double
+marswM =(<>) <:$> mars <:*> moon2
+
+
+You can calculate the numbers in front of earthwM (or use guess and check). Now let's make solar1
+
+solar1 :: A.Animation Double I Rasterific V2 Double
+solar1 = (translateX <:$> ((\x -> 2 * cos x) <:$> dur) <:*> 
+         (translateY <:$> ((\x -> 2 * sin x) <:$> dur) <:*> 
+         (earthwM)) <:> sun <:> background)
+
+Notice that this is an infinite active. It's easier to deal with actives of same type. To avoid infinite frames
+and compiling time, I recommend you use cut in your main. solar1 looks good, let's add more planets!
+
+solar2 :: A.Animation Double I Rasterific V2 Double
+solar2 = (translateX <:$> ((\x -> (6/2) * cos x) <:$> dur) <:*> 
+         (translateY <:$> ((\x -> (6/2) * sin x) <:$> dur) <:*> 
+         (earthwM)) <:>
+         (translateX <:$> ((\x -> (4/2) * cos x) <:$> dur) <:*>
+         (translateY <:$> ((\x -> (4/2) * sin x) <:$> dur) <:*>
+         (mercury))  )  <:> sun2 <:> background )
+
+In solar2 we added mercury to earthwM. The first two lines of solar2 apply transfromations to an infinite active
+(<:$> dur makes it infinite). Then we combined these transfromations with another set of transformations using
+<:> operator. Now you can see a pattern for adding planets. I am going to leave adding other planets as an exercise.
+
+Note: the colors do not match actual colors of planets. We picked colors that make all planets visible.
+----------------
+-- Adding background image
+
+The animation you have has a white still background. You can change the background to an image through a few simple steps:
+1) download the image and save it in same directory you're working in (src usually).
+
+2) change your main function:
+main :: IO ()
+main = do
+  pic <- loadImageEmb "fileName.jpg"
+  case pic of
+    Left st -> putStrLn st
+    Right img -> do
+        let background2 ::  Diagram B
+            background2 =  image img # sized (mkWidth 55) 
+            frames = simulate 25 (cut 20  activeName <:> ipure(background2)) 
+        forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
+          renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame
+
 
 -}
 

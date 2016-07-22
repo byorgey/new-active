@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 import           Text.Printf
 
@@ -17,14 +19,15 @@ import           Diagrams.Prelude            hiding (interval, simulate, ui, (->
 background :: A.Animation Double I Rasterific V2 Double
 background = (ipure (rect 55 35 # fc white))
 
-orbit :: (Num n, Ord n, Num a) => Double -> Double -> Double -> Active n I a -> Active n I a
-orbit xT yT (Active time f1) = 
-           (translateX <:$> ((\c -> xT * cos (c)) <:$> dur) <:*>
-           (translateY <:$> ((\c -> yT * sin (c)) <:$> dur) <:*>
-           (Active time f1)) )
+orbit :: (Floating n, Ord n, N a ~ n, Additive (V a), Transformable a, R2 (V a)) 
+       => n -> n -> n -> Active n I a -> Active n I a
+orbit xT yT sp a = 
+           (translateX <:$> ((\c -> xT * cos (sp*c)) <:$> dur) <:*>
+           (translateY <:$> ((\c -> yT * sin (sp*c)) <:$> dur) <:*>
+            a )  )
            
 orbitEx :: A.Animation Double I Rasterific V2 Double
-orbitEx = orbit (2 3 circleCircle)
+orbitEx = orbit 2 3 4 jupiter
 
 ------------------
 movingCircle' :: A.Animation Double F Rasterific V2 Double
@@ -211,16 +214,12 @@ earth :: A.Animation Double I Rasterific V2 Double
 earth = ipure(circle 0.5 # fc blue)
 
 moon :: A.Animation Double I Rasterific V2 Double
-moon =    (translateX <:$> ((\x -> 0.7 * cos (3*x/2)) <:$> dur) <:*> (translateY <:$> 
+moon =    (translateX <:$> ((\x -> 0.7 * cos (6.2*x)) <:$> dur) <:*> (translateY <:$> 
   ((\x -> 0.7 * sin (3*x/2))<:$> dur) <:*> (ipure (circle 0.1 # fc green # lc red))))
 
 moon2 :: A.Animation Double I Rasterific V2 Double
-moon2 =    (translateX <:$> ((\x -> 0.7 * cos (2*x)) <:$> dur) <:*> (translateY <:$> 
-  ((\x -> 0.7 * sin (2*x))<:$> dur) <:*> (ipure (circle 0.1 # fc green # lc red))))
-  
-moon3 :: A.Animation Double I Rasterific V2 Double
-moon3 =    (translateX <:$> ((\x -> 0.2 * cos (2*x)) <:$> dur) <:*> (translateY <:$> 
-  ((\x -> 0.2 * sin (2*x))<:$> dur) <:*> (ipure (circle 0.1 # fc green))))  
+moon2 =    (translateX <:$> ((\x -> 0.7 * cos (5.2*x)) <:$> dur) <:*> (translateY <:$> 
+  ((\x -> 0.7 * sin (2*x))<:$> dur) <:*> (ipure (circle 0.1 # fc green # lc yellow)))) 
 
 mercury :: A.Animation Double I Rasterific V2 Double
 mercury = ipure(circle 0.25 # fc pink)
@@ -260,6 +259,17 @@ earthwM = (<>) <:$> earth <:*> moon
 marswM :: A.Animation Double I Rasterific V2 Double
 marswM =(<>) <:$> mars <:*> moon2 
 
+solarSystem2 :: A.Animation Double I Rasterific V2 Double
+solarSystem2 = (orbit 2.15  2.15  8.0  mercury) <:>
+               (orbit 3.70  2.65  6.7    venus) <:>
+               (orbit 5.80  3.50  6.0  earthwM) <:>
+               (orbit 8.00  4.45  5.0   marswM) <:>
+               (orbit 12.2  5.75  4.0  jupiter) <:>
+               (orbit 16.2  7.35  3.0   saturn) <:>
+               (orbit 20.5  9.20  2.0   uranus) <:>
+               (orbit 24.0  10.7  1.0  neptune) <:>
+               (orbit 27.0  12.5  0.8    pluto) <:> sun2 -- <:> background
+
 solarSystem :: A.Animation Double I Rasterific V2 Double
 solarSystem = (translateX <:$> ((\x -> (2.15) * cos (8*x)) <:$> dur) <:*>
          (translateY <:$> ((\x -> (2.15) * sin (8*x)) <:$> dur) <:*>
@@ -295,24 +305,24 @@ solarSystem = (translateX <:$> ((\x -> (2.15) * cos (8*x)) <:$> dur) <:*>
          
          (translateX <:$> ((\x -> (27.0) * cos (0.8*x)) <:$> dur) <:*>
          (translateY <:$> ((\x -> (12.5) * sin (0.8*x)) <:$> dur) <:*>
-         (pluto))  ) <:> sun2) )
+         (pluto))  ) <:> sun2 <:> background) )
 
  
 ------------------
 main :: IO ()
 main = do
-  let frames = simulate 25 (cut 15 orbitEx)
+ {- let frames = simulate 25 (cut 10 solarSystem2)
   forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
-    renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame 
-  {- pic <- loadImageEmb "stars.jpg"
+    renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame -}
+  pic <- loadImageEmb "stars.jpg"
   case pic of
     Left st -> putStrLn st
     Right img -> do
         let background2 ::  Diagram B
             background2 =  image img # sized (mkWidth 55) 
-            frames = simulate 25 (cut 20  solarSystem <:> ipure(background2)) 
+            frames = simulate 25 (cut 20  solarSystem2 <:> ipure(background2)) 
         forM_ (zip [0 :: Int ..] frames) $ \(i,frame) -> do
-          renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame -}
+          renderRasterific (printf "out/frame%03d.png" i) (mkWidth 400) frame
 
 {-
 

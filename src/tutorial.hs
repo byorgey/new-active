@@ -524,6 +524,36 @@ In solar2 we added mercury to earthwM. The first two lines of solar2 apply trans
 <:> operator. Now you can see a pattern for adding planets. I am going to leave adding other planets as an exercise.
 
 Note: the colors do not match actual colors of planets. We picked colors that make all planets visible.
+
+----------------
+-- orbit
+The code above has a lot of repition that can be avoided. We can make a function for the repeated code, 
+and then just use that function to make our actives. So I am going to make a function called orbit.
+
+orbit :: (Floating n, Ord n, N a ~ n, Additive (V a), Transformable a, R2 (V a)) 
+       => n -> n -> n -> Active n I a -> Active n I a
+orbit xT yT sp act = 
+           (translateX <:$> ((\c -> xT * cos (sp*c)) <:$> dur) <:*>
+           (translateY <:$> ((\c -> yT * sin (sp*c)) <:$> dur) <:*>
+            act )  )
+
+As you can see, orbit takes in four arguments, three floating points for the horizontal translation,
+vertical translation, speed of planets, and an active to be translated. Now I can do something like this:
+
+solarSystem2 :: A.Animation Double I Rasterific V2 Double
+solarSystem2 = (orbit 2.15  2.15  8.0  mercury) <:>
+               (orbit 3.70  2.65  6.7    venus) <:>
+               (orbit 5.80  3.50  6.0  earthwM) <:>
+               (orbit 8.00  4.45  5.0   marswM) <:>
+               (orbit 12.2  5.75  4.0  jupiter) <:>
+               (orbit 16.2  7.35  3.0   saturn) <:>
+               (orbit 20.5  9.20  2.0   uranus) <:>
+               (orbit 24.0  10.7  1.0  neptune) <:>
+               (orbit 27.0  12.5  0.8    pluto) <:> 
+               sun2 <:> background
+
+This is a lot easier to read and understand 
+
 ----------------
 -- Adding background image
 

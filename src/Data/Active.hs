@@ -66,9 +66,9 @@ addDuration (Duration _) Forever      = Forever
 addDuration (Duration a) (Duration b) = Duration (a + b)
 
 minDuration :: (Num n, Ord n) => Duration f1 n -> Duration f2 n -> Duration (Isect f1 f2) n
-minDuration Forever Forever = Forever
-minDuration Forever (Duration b) = Duration b
-minDuration (Duration a) Forever = Duration a
+minDuration Forever Forever           = Forever
+minDuration Forever (Duration b)      = Duration b
+minDuration (Duration a) Forever      = Duration a
 minDuration (Duration a) (Duration b) = Duration (min a b)
 
 -- could make ISemigroup, IMonoid classes...
@@ -100,9 +100,9 @@ infixr 4 ->>
 infix 4 ->-
 (->-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 (Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (addDuration d1 d2) f
-  where 
-    f n | n < n1     = f1 (n)
-        | n >= n1    = f1 n1 <> f2 (n - n1)
+  where
+    f n | n < n1  = f1 n
+        | n >= n1 = f1 n1 <> f2 (n - n1)
 
 newtype Horiz n a = Horiz { getHoriz :: Active n F a }
 
@@ -131,110 +131,69 @@ movie :: (Num n, Ord n, Semigroup a) => [Active n F a] -> Active n F a
 movie []     = error "Can't make empty movie!"
 movie (a:as) = sequenceNE (a :| as)
 
-
 startVal :: Num n => Active n f a -> a
 startVal (Active _ f) = f 0
 
 endVal :: Active n F a -> a
-endVal (Active (Duration n) f) = f n
+endVal (Active (Duration d) f) = f d
 
 stretch :: (Num n, Ord n) => n -> Active n F a -> Active n F a
-stretch t (Active (Duration n1) f1)
-    | t > 0     = Active (Duration n2) f
-    | otherwise = error "Can only stretch by rational numbers > 0"
-    where
-      n2   = t * n1
-      f n  = f1 (n*t)
+stretch s a@(Active (Duration d) f)
+    | s > 0     = Active (Duration (d*s)) (f . (/s))
+    | s < 0     = stretch (abs s) (backwards a)
+    | otherwise = error "Active stretched by zero"
 
 backwards :: Num n => Active n F a -> Active n F a
-backwards (Active (Duration n1) f1) =  Active (Duration n1) f
-      where
-        f n =  f1 (n1 - n)
+backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
 
 runActive :: Ord n => Active n f a -> n -> a
-runActive (Active (Duration n1) a1) t
-    | t > n1    = error "t1 can't be bigger than n1"
-    | otherwise = a1 (t)
-
-truncateDuration :: (Ord n, Num n) => Active n F a -> Active n F a -> Active n F a
-truncateDuration (Active (Duration t1) a1) (Active (Duration t2) a2)
-   | t1 < t2   = Active (Duration t1) a3
-   | t2 < t1   = Active (Duration t2) a4
-   | otherwise = error "one Active has to be shorter than the other"
-   where
-     a3 x = a1 (t2-t1)
-     a4 x = a2 (t1-t2)
-
-matchShorter :: (Ord n, Fractional n) => Active n f a -> Active n f a -> Active n f a
-matchShorter (Active (Duration t1) a1) (Active (Duration t2) a2)
-    | (t1 < t2) && t1 > 0   = stretch x (Active (Duration t1) a1)
-    | (t2 < t1) && t2 > 0   = stretch y (Active (Duration t2) a2)
-    where
-      x = (t2 / t1)
-      y = (t1 / t2) 
--- I think we need to get rid of matchShorter and truncateDuration.
+runActive (Active (Duration d) f) t
+  | t > d     = error "Active evaluated past its duration"
+  | otherwise = f t
 
 matchDuration :: (Ord n, Fractional n, Num n) => Active n f a -> Active n f a -> Active n f a
-matchDuration (Active (Duration t1) a1) (Active (Duration t2) a2) =
-    stretch x (Active (Duration t1) a1)
-        where
-          x = t2 / t1
+matchDuration a@(Active (Duration d1) _) (Active (Duration d2) _) = stretch (d2/d1) a
 
 stretchTo :: (Ord n,  Fractional n) => n -> Active n F a -> Active n F a
-stretchTo n (Active (Duration t1) a1) = stretch x (Active (Duration t1) a1)
+stretchTo n (Active (Duration d) f) = stretch (n/d) (Active (Duration d) f)
      where
        x = n/t1
 
 discrete :: (RealFrac n, Ord n, Ord a, Fractional a) => [a] -> Active n F a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
-discrete xs = (Active 1 f1)
-     where
-       f1 t
-          | t == 1    = V.unsafeLast v
-          | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
-       v = V.fromList xs
+discrete xs = (Active 1 f)
+  where
+    f t
+      | t == 1    = V.unsafeLast v
+      | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
+    v = V.fromList xs
 
 snapshot :: (Num n, Fractional n) => n -> Active n f a -> Active n I a
-snapshot t (Active (Duration t1) f1) = Active Forever f2
-       where
-         f2 x = f1 (t)
+snapshot t (Active _ f) = Active Forever (const (f t))
 
 simulate :: (Eq n, Num n, Fractional n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
-simulate n (Active (Duration t1) a1) = map a1 [0, 1/n .. t1]
-simulate n (Active Forever a2) = map a2 [0, 1/n ..]
+simulate n (Active (Duration d) f) = map f [0, 1/n .. d]
+simulate n (Active Forever      f) = map f [0, 1/n ..]
 
 instance (Num n, Ord n) => IApplicative (Active n) where
   type Id = I
   type (:*:) i j = Isect i j
-  -- ipure :: a -> f Id a
-  ipure a = Active Forever f
-    where
-      f _ = a
-  -- (<:*>) :: f i (a -> b) -> f j a -> f (i :*: j) b
-  (<:*>) (Active t1 f1) (Active t2 f2) = Active (minDuration t1 t2) f3
-    where
-      f3 t = (f1 t) (f2 t)
+  ipure a = Active Forever (const a)
+  Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
 
 instance IFunctor (Active n) where
-  -- imap :: (a -> b) -> f i a -> f i b
-  imap f1 (Active d1 f2) = Active d1 f3
-    where
-      f3 t = f1  (f2 (t))
-      
+  imap f (Active d1 g) = Active d1 (f . g)
+
 instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
   a1 <> a2 = (<>) <:$> a1 <:*> a2
 
 stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
 stack = sconcat . NE.fromList
 
-(<:>) :: (Semigroup a, Num n, Ord n) => Active n f1 a -> Active n f2 a -> Active n (f1 :*: f2) a
+(<:>) :: (Semigroup a, Num n, Ord n)
+      => Active n f1 a -> Active n f2 a -> Active n (f1 :*: f2) a
 a1 <:> a2 = (<>) <:$> a1 <:*> a2
 
-
 cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
-cut c (Active Forever f) = Active (Duration c) f
-cut c (Active (Duration t1) f1) = (Active (Duration t2) f1)
-  where
-    t2 | c <= t1   = c
-       | otherwise = t1
+cut c (Active d f) = Active ((Duration c) `minDuration` d) f

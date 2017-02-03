@@ -1,10 +1,12 @@
-{-# LANGUAGE DataKinds                 #-}
-{-# LANGUAGE FlexibleInstances         #-}
-{-# LANGUAGE GADTs                     #-}
-{-# LANGUAGE KindSignatures            #-}
-{-# LANGUAGE TypeFamilies              #-}
-{-# LANGUAGE UndecidableInstances      #-}
-{-# LANGUAGE TypeOperators             #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DeriveFunctor        #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE StandaloneDeriving   #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -24,7 +26,7 @@ import           Data.Semigroup
 
 import           Control.IApplicative
 import           Data.Finitude
-import qualified Data.Vector         as V
+import qualified Data.Vector          as V
 
 ------------------------------------------------------------
 -- Time
@@ -33,12 +35,13 @@ import qualified Data.Vector         as V
 data Duration f n where
   Duration :: n -> Duration F n
   Forever  ::      Duration I n
-  --, Show, Read, Enum, Num, Fractional, Real, RealFrac, Functor)
+
+deriving instance Show n => Show (Duration f n)
+deriving instance Functor (Duration f)
 
 instance Eq n => Eq (Duration f n) where
   Duration n1 == Duration n2 = n1 == n2
   Forever     == Forever     = True
-  _           == _           = False
 
 instance Num n => Num (Duration F n) where
   fromInteger               = toDuration . fromInteger
@@ -137,7 +140,7 @@ startVal (Active _ f) = f 0
 endVal :: Active n F a -> a
 endVal (Active (Duration d) f) = f d
 
-stretch :: (Num n, Ord n) => n -> Active n F a -> Active n F a
+stretch :: (Fractional n, Ord n) => n -> Active n F a -> Active n F a
 stretch s a@(Active (Duration d) f)
     | s > 0     = Active (Duration (d*s)) (f . (/s))
     | s < 0     = stretch (abs s) (backwards a)
@@ -151,15 +154,13 @@ runActive (Active (Duration d) f) t
   | t > d     = error "Active evaluated past its duration"
   | otherwise = f t
 
-matchDuration :: (Ord n, Fractional n, Num n) => Active n f a -> Active n f a -> Active n f a
+matchDuration :: (Ord n, Fractional n) => Active n f a -> Active n f a -> Active n f a
 matchDuration a@(Active (Duration d1) _) (Active (Duration d2) _) = stretch (d2/d1) a
 
 stretchTo :: (Ord n,  Fractional n) => n -> Active n F a -> Active n F a
 stretchTo n (Active (Duration d) f) = stretch (n/d) (Active (Duration d) f)
-     where
-       x = n/t1
 
-discrete :: (RealFrac n, Ord n, Ord a, Fractional a) => [a] -> Active n F a
+discrete :: (RealFrac n, Ord n) => [a] -> Active n F a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = (Active 1 f)
   where
@@ -168,10 +169,10 @@ discrete xs = (Active 1 f)
       | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
     v = V.fromList xs
 
-snapshot :: (Num n, Fractional n) => n -> Active n f a -> Active n I a
+snapshot :: (Fractional n) => n -> Active n f a -> Active n I a
 snapshot t (Active _ f) = Active Forever (const (f t))
 
-simulate :: (Eq n, Num n, Fractional n, Enum n) => n -> Active n f a -> [a]
+simulate :: (Eq n, Fractional n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
 simulate n (Active (Duration d) f) = map f [0, 1/n .. d]
 simulate n (Active Forever      f) = map f [0, 1/n ..]

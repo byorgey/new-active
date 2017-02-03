@@ -16,3 +16,4 @@ TAGS
 src/Test
 .DS_Store
 src/out
+.stack-work

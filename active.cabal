@@ -17,6 +17,8 @@ library
   -- other-modules:
   other-extensions:    ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs, KindSignatures, MultiParamTypeClasses, PolyKinds, RankNTypes, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
   build-depends:       base >=4.8 && <4.10,
-                       semigroups >= 0.18
+                       semigroups >= 0.18,
+                       vector >= 0.11,
+                       split >= 0.2
   hs-source-dirs:      src
   default-language:    Haskell2010

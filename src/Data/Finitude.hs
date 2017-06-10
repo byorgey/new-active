@@ -1,11 +1,12 @@
 {-# LANGUAGE DataKinds      #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies   #-}
+{-# LANGUAGE TypeOperators  #-}
 
 module Data.Finitude
   ( Finitude(..)
-  , Union
-  , Isect
+  , type (⊔)
+  , type (⊓)
   ) where
 
 -- | A 'Finitude' value denotes whether something is finite ('F') or
@@ -20,9 +21,10 @@ data Finitude =
 --
 --   Finitudes form a monoid under this operation with 'F' as the
 --   identity element.
-type family Union (f1 :: Finitude) (f2 :: Finitude) :: Finitude where
-  Union F f = f
-  Union I f = I
+type family (f1 :: Finitude) ⊔ (f2 :: Finitude) :: Finitude where
+  f ⊔ f = f
+  F ⊔ f = f
+  I ⊔ f = I
 
 -- | Intersection on type-level finitudes.  This is not quite as
 --   straightforward as union: the intersection of a finite set with
@@ -35,12 +37,9 @@ type family Union (f1 :: Finitude) (f2 :: Finitude) :: Finitude where
 --
 --   This operation is associative; 'Finitude' forms a monoid under
 --   'Isect' with 'I' as the identity element.
-type family Isect (f1 :: Finitude) (f2 :: Finitude) :: Finitude where
-  Isect f f = f
-  Isect F f = F
-  Isect f F = F
-  Isect f g = I
-
-  -- or  Isect I g = g  ?
+type family (f1 :: Finitude) ⊓ (f2 :: Finitude) :: Finitude where
+  f ⊓ f = f
+  F ⊓ f = F
+  I ⊓ g = g
 
 

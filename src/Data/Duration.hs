@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators      #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -23,11 +24,13 @@ module Data.Duration
 
     -- * Operations
 
-  , addDuration, minDuration
+  , addDuration, maxDuration, minDuration, compareDuration
 
   ) where
 
 import           Data.Finitude
+
+import           Linear.Vector
 
 ------------------------------------------------------------
 -- Durations
@@ -48,6 +51,10 @@ data Duration f n where
 
 deriving instance Show n => Show (Duration f n)
 deriving instance Functor (Duration f)
+
+instance Applicative (Duration F) where
+  pure = Duration
+  Duration f <*> Duration x = Duration (f x)
 
 instance Eq n => Eq (Duration f n) where
   Duration n1 == Duration n2 = n1 == n2
@@ -80,11 +87,14 @@ compareDuration (Duration n1) (Duration n2) = compare n1 n2
 --   numeric literals can be used as finite durations.
 instance Num n => Num (Duration F n) where
   fromInteger               = toDuration . fromInteger
-  negate (Duration n)       = Duration (negate n)
-  Duration n1 + Duration n2 = Duration (n1 + n2)
-  Duration n1 * Duration n2 = Duration (n1 * n2)
+  negate = error "use negated to negate a duration"
+  (+)    = error "use ^+^ to add durations"
+  (*)    = error "multiplying durations makes no sense"
   abs (Duration n)          = Duration (abs n)
-  signum (Duration n)       = Duration (signum n)
+  signum = error "signum on durations makes no sense"
+
+instance Additive (Duration F) where
+  zero = Duration 0
 
 -- | A wrapper function to convert a numeric value into a finite duration.
 toDuration :: n -> Duration F n
@@ -101,13 +111,19 @@ fromFDuration (Duration n) = n
 
 -- | Add two durations.  If either one is infinite, so is the result;
 --   finite durations add normally.
-addDuration :: Num n => Duration f1 n -> Duration f2 n -> Duration (Union f1 f2) n
+addDuration :: Num n => Duration f1 n -> Duration f2 n -> Duration (f1 ⊔ f2) n
 addDuration Forever      _            = Forever
 addDuration (Duration _) Forever      = Forever
 addDuration (Duration a) (Duration b) = Duration (a + b)
 
+-- | The maximum of two durations.
+maxDuration :: Ord n => Duration f1 n -> Duration f2 n -> Duration (f1 ⊔ f2) n
+maxDuration Forever      _            = Forever
+maxDuration (Duration _) Forever      = Forever
+maxDuration (Duration a) (Duration b) = Duration (max a b)
+
 -- | The minimum of two durations.
-minDuration :: (Num n, Ord n) => Duration f1 n -> Duration f2 n -> Duration (Isect f1 f2) n
+minDuration :: (Num n, Ord n) => Duration f1 n -> Duration f2 n -> Duration (f1 ⊓ f2) n
 minDuration Forever Forever           = Forever
 minDuration Forever (Duration b)      = Duration b
 minDuration (Duration a) Forever      = Duration a

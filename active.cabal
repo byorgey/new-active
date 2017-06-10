@@ -19,6 +19,7 @@ library
   build-depends:       base >=4.8 && <4.10,
                        semigroups >= 0.18,
                        vector >= 0.11,
-                       split >= 0.2
+                       split >= 0.2,
+                       linear
   hs-source-dirs:      src
   default-language:    Haskell2010

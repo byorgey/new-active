@@ -13,7 +13,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Control.IApplicative, Data.Active, Data.Finitude
+  exposed-modules:     Control.IApplicative, Data.Active, Data.Finitude, Data.Duration
   -- other-modules:
   other-extensions:    ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs, KindSignatures, MultiParamTypeClasses, PolyKinds, RankNTypes, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
   build-depends:       base >=4.8 && <4.10,

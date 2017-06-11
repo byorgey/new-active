@@ -110,7 +110,14 @@ data Active :: * -> Finitude -> * -> * where
 --
 --   > active 3 (\d -> if d <= 3 then d*2 else error "o noes!")
 --
---   is a well-defined, total 'Active' value.
+--   is a well-defined, total 'Active' value.  Because 'Active' is
+--   abstract, it is impossible to ever observe the value of an
+--   'Active' past its duration.
+--
+--   > > let a = active 3 (\d -> if d <= 5 then d*2 else error "o noes!")
+--   > > runActive a 4
+--   > *** Exception: Active value evaluated past its duration.
+
 active :: Duration f n -> (n -> a) -> Active n f a
 active = Active
 

@@ -42,11 +42,11 @@ module Data.Active
     -- $seq
 
   , (->-), (->>), (>>-), (-<>-)
-  , movieNE, movie, Horiz(..)
+  , movieNE, movie, Sequential(..)
 
     -- ** Parallel composition
     -- $par
-  , (<+>), (<->), stack
+  , (<+>), (<->), stackNE, stack
 
     -- ** Other combinators
 
@@ -167,7 +167,12 @@ start (Active _ f) = f 0
 end :: Active n F a -> a
 end (Active (Duration d) f) = f d
 
--- | XXX document me
+-- | Generate a list of "frames" or "samples" taken at regular
+--   intervals from an 'Active' value.  The first argument is the number
+--   of samples per unit time.  That is, @simulate f a@ samples @a@ at
+--   times \( 0, 1/f, 2/f, \dots \), ending at the last multiple of
+--   \(1/f\) which is not greater than the duration.  The list will be
+--   infinite iff the 'Active' is.
 simulate :: (Eq n, Fractional n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Frame rate can't equal zero"
 simulate n (Active (Duration d) f) = map f [0, 1/n .. d]
@@ -203,7 +208,7 @@ infixr 4 ->>
 --   as well, with @'instant' 'mempty'@ as the identity.  However, the
 --   'Semigroup' and 'Monoid' instances for 'Active' are for parallel
 --   rather than sequential composition.  The instances with
---   sequential composition are instead defined for the 'Horiz'
+--   sequential composition are instead defined for the 'Sequential'
 --   newtype wrapper.
 (->-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 (Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (addDuration d1 d2) f
@@ -250,26 +255,25 @@ infix 4 -<>-
     f n | n < n1  = f1 n
         | n >= n1 = f1 n1 <> f2 (n - n1)
 
--- XXX change the name of Horiz
-
 -- | A newtype wrapper for finite 'Active' values.  The 'Semigroup'
 --   and 'Monoid' instances for this wrapper use sequential rather
 --   than parallel composition.
-newtype Horiz n a = Horiz { getHoriz :: Active n F a }
+newtype Sequential n a = Sequential { getSequential :: Active n F a }
 
-instance (Num n, Ord n, Semigroup a) => Semigroup (Horiz n a) where
-  Horiz a1 <> Horiz a2 = Horiz (a1 ->- a2)
+instance (Num n, Ord n, Semigroup a) => Semigroup (Sequential n a) where
+  Sequential a1 <> Sequential a2 = Sequential (a1 ->- a2)
 
-instance (Num n, Ord n, Monoid a, Semigroup a) => Monoid (Horiz n a) where
-  mempty = Horiz (instant mempty)
+instance (Num n, Ord n, Monoid a, Semigroup a) => Monoid (Sequential n a) where
+  mempty  = Sequential (instant mempty)
   mappend = (<>)
 
 -- | Sequence a nonempty list of finite actives together, via ('->-'),
 --   but using a balanced fold (which can be more efficient than the
 --   usual linear fold).
 movieNE :: (Num n, Ord n, Semigroup a) => NonEmpty (Active n F a) -> Active n F a
-movieNE = getHoriz . foldB1 . NE.map Horiz
+movieNE = getSequential . foldB1 . coerce
 
+-- | A balanced binary fold.
 foldB1 :: Semigroup a => NonEmpty a -> a
 foldB1 (a :| as) = maybe a (a <>) (foldBM as)
   where
@@ -296,24 +300,13 @@ movie (a:as) = movieNE (a :| as)
 -- $par
 -- This is a paragraph about parallel composition.
 
-instance (Num n, Ord n) => IApplicative (Active n) where
-  type Id = I
-  type (:*:) i j = i ⊓ j
-  ipure a = Active Forever (const a)
-  Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
+----------------------------------------
+-- Unioning parallel composition
 
-instance IFunctor (Active n) where
-  imap f (Active d1 g) = Active d1 (f . g)
-
-instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
-  (<>) = (<+>)
-
-stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
-stack = sconcat . NE.fromList
-
-stackNE :: (Semigroup a, Num n, Ord n) => NonEmpty (Active n f a) -> Active n f a
-stackNE = sconcat
-
+-- | Unioning parallel composition.  The duration of @x <+> y@ is the
+--   /maximum/ of the durations of @x@ and @y@.  Where they are both
+--   defined, the values are combined with ('<>').  Where only one is
+--   defined, its value is simply copied.
 (<+>) :: (Semigroup a, Num n, Ord n)
       => Active n f1 a -> Active n f2 a -> Active n (f1 ⊔ f2) a
 a1@(Active d1 _) <+> a2@(Active d2 _)
@@ -325,6 +318,53 @@ a1@(Active d1 _) <+> a2@(Active d2 _)
            )
                     -- (Nothing, Nothing) case can't happen.
 
+-- | If @a@ is a 'Semigroup', then 'Active n f a' forms a 'Semigroup'
+--   under unioning parallel composition.  Notice that the two
+--   arguments of ('<>') are restricted to be either both finite or
+--   both infinite; ('<+>') is strictly more general since it can
+--   combine active values with different finitudes.
+instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
+  (<>) = (<+>)
+
+-- | If @a@ is a 'Monoid', then 'Active n F a' forms a 'Monoid' under
+--   unioning parallel composition.  The identity element is
+--   @'instant' 'mempty'@, the same as the identity element for the
+--   sequential composition monoid (see 'Sequential').
+instance (Monoid a, Semigroup a, Num n, Ord n) => Monoid (Active n F a) where
+  mempty = instant mempty
+  mappend = (<>)
+
+-- | "Stack" a nonempty list of active values via unioning parallel
+--   composition.  This is actually just a synonym for 'sconcat'.
+stackNE :: (Semigroup a, Num n, Ord n) => NonEmpty (Active n f a) -> Active n f a
+stackNE = sconcat
+
+-- | Like 'stackNE', but on a list for convenience.  Calling 'stack'
+--   on the empty list is a runtime error.
+stack :: (Semigroup a, Num n, Ord n) => [Active n f a] -> Active n f a
+stack = sconcat . NE.fromList
+
+----------------------------------------
+-- Intersecting parallel composition
+
+instance IFunctor (Active n) where
+  imap f (Active d1 g) = Active d1 (f . g)
+
+-- | 'Active n' is an 'IApplicative', somewhat akin to 'ZipList':
+--   * 'ipure' creates an infinite constant value.
+--   * @f '<:*>' x@ applies @f@ to @x@ pointwise, taking the minimum
+--     duration of @f@ and @x@.
+instance (Num n, Ord n) => IApplicative (Active n) where
+  type Id = I
+  type (:*:) i j = i ⊓ j
+  ipure a = Active Forever (const a)
+  Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
+
+-- | Intersecting parallel composition.  The duration of @x <-> y@ is
+--   the /minimum/ of the durations of @x@ and @y@.
+--
+--   Note that this is a special case of the 'IApplicative' instance
+--   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
 (<->) :: (Semigroup a, Num n, Ord n)
       => Active n f1 a -> Active n f2 a -> Active n (f1 ⊓ f2) a
 (<->) = iliftA2 (<>)
@@ -380,6 +420,5 @@ cut c (Active d f) = Active ((Duration c) `minDuration` d) f
    - stretchTo
    - matchDuration
 
-   
 -}
 

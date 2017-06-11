@@ -158,6 +158,14 @@ interval a b = active (toDuration (b - a)) (a+)
 dur :: Active n I n
 dur = active Forever id
 
+infixl 4 <#>
+
+-- | Backwards 'fmap', that is, a synonym for @'flip' ('<$>')@.  This
+--   can be useful when starting from some 'Active' like 'ui',
+--   'interval', or 'dur', and then applying a function to it. For
+--   example:
+--
+--   > interval 3 5 <#> \t -> circle 1 # translateX t
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
 

@@ -29,8 +29,9 @@ module Data.Active
   , Active
 
     -- * Constructing
-  , active, instant
+  , active, instant, lasting, always
   , ui, interval, dur
+  , (<$:>)
 
     -- * Running/sampling
 
@@ -115,9 +116,15 @@ active = Active
 
 -- | A value of duration zero.
 --
---   @'instant' a = 'active' 0 (const a)@.
+--   @'instant' a = 'lasting' 0 a@
 instant :: Num n => a -> Active n F a
-instant a = active 0 (const a)
+instant = lasting 0
+
+-- | A constant value lasting for the specified duration.
+--
+--   @'lasting' d = 'active' (Duration d) . const = 'cut' d . always@
+lasting :: Num n => n -> a -> Active n F a
+lasting d = active (Duration d) . const
 
 -- | The unit interval: the identity function on the interval \( [0,1] \).
 ui :: Num n => Active n F n
@@ -133,6 +140,9 @@ interval a b = Active (toDuration (b - a)) (a+)
 --   representing "the current duration" at any point in time.
 dur :: Active n I n
 dur = Active Forever id
+
+(<$:>) :: Active n f a -> (a -> b) -> Active n f b
+(<$:>) = flip (<:$>)
 
 --------------------------------------------------
 -- Running/sampling
@@ -168,7 +178,7 @@ end (Active (Duration d) f) = f d
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the number
 --   of samples per unit time.  That is, @simulate f a@ samples @a@ at
---   times \( 0, 1/f, 2/f, \dots \), ending at the last multiple of
+--   times \( 0, \frac 1 f, \frac 2 f, \dots \), ending at the last multiple of
 --   \(1/f\) which is not greater than the duration.  The list will be
 --   infinite iff the 'Active' is.
 simulate :: (Eq n, Fractional n, Enum n) => n -> Active n f a -> [a]
@@ -182,7 +192,7 @@ simulate n (Active Forever      f) = map f [0, 1/n ..]
 -- $seq
 -- This is a paragraph about sequential composition.
 
-infixr 4 ->>
+infixr 4 ->-, ->>, >>-, -<>-
 
 -- | Sequential composition.
 --
@@ -227,7 +237,6 @@ a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (Last a))
 (>>-) :: forall n f a. (Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (First a))
 
-infix 4 -<>-
 -- | Accumulating sequential composition.
 --
 --   @x -<>- y@ first behaves as @x@, and then behaves as @y@, except
@@ -283,6 +292,7 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
     foldB _   _ [a]  = a
     foldB (&) z as   = foldB (&) z (pair (&) as)
 
+    pair _   []         = []
     pair _   [a]        = [a]
     pair (&) (a1:a2:as) = (a1 & a2) : pair (&) as
 
@@ -300,6 +310,8 @@ movie (a:as) = movieNE (a :| as)
 
 ----------------------------------------
 -- Unioning parallel composition
+
+infixr 6 <+>
 
 -- | Unioning parallel composition.  The duration of @x <+> y@ is the
 --   /maximum/ of the durations of @x@ and @y@.  Where they are both
@@ -355,8 +367,16 @@ instance IFunctor (Active n) where
 instance (Num n, Ord n) => IApplicative (Active n) where
   type Id = I
   type (:*:) i j = i ⊓ j
-  ipure a = Active Forever (const a)
+  ipure = always
   Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
+
+-- | @'always' x@ creates an infinite 'Active' which is constantly
+--   'x'.  A synonym for 'ipure', but with no type class constraints
+--   on @n@.
+always :: a -> Active n I a
+always a = Active Forever (const a)
+
+infixr 6 <->
 
 -- | Intersecting parallel composition.  The duration of @x '<->' y@ is
 --   the /minimum/ of the durations of @x@ and @y@.

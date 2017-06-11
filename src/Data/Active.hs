@@ -128,18 +128,18 @@ lasting d = active (Duration d) . const
 
 -- | The unit interval: the identity function on the interval \( [0,1] \).
 ui :: Num n => Active n F n
-ui = Active 1 id
+ui = active 1 id
 
 -- | @interval a b@ varies linearly from \( a \) to \( b \) over a
 --   duration of \( b - a \).  That is, it represents the function \( d \mapsto a + d \).
 interval :: Num n => n -> n -> Active n F n
-interval a b = Active (toDuration (b - a)) (a+)
+interval a b = active (toDuration (b - a)) (a+)
 
 -- | @dur@ is the infinite active value representing the function
 --   \( d \mapsto d \).  It is called @dur@ since it can be thought of as
 --   representing "the current duration" at any point in time.
 dur :: Active n I n
-dur = Active Forever id
+dur = active Forever id
 
 (<$:>) :: Active n f a -> (a -> b) -> Active n f b
 (<$:>) = flip (<:$>)

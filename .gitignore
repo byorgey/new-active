@@ -15,6 +15,7 @@ TAGS
 /cabal.sandbox.config
 
 src/Test
+src/Test2
 .DS_Store
 src/out
 .stack-work

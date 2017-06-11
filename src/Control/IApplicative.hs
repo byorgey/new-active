@@ -15,7 +15,7 @@
 
 module Control.IApplicative
   ( -- * Indexed functors
-    IFunctor(..), (<:$>)
+    IFunctor(..)
 
     -- * Indexed applicative functors
   , IApplicative(..), iliftA2
@@ -30,9 +30,7 @@ module Control.IApplicative
 class IFunctor (f :: k -> * -> *) where
   imap :: (a -> b) -> f i a -> f i b
 
--- | An infix synonym for 'imap'.
-(<:$>) :: IFunctor f => (a -> b) -> f i a -> f i b
-(<:$>) = imap
+infixl 4 <:*>
 
 -- | Applicative functors, indexed by a type-level monoid (of
 --   arbitrary kind).  'ipure' and '(<:*>)' at the value level are
@@ -59,7 +57,7 @@ class IFunctor f => IApplicative (f :: k -> * -> *) where
 
 -- | An indexed analogue to 'liftA2'.
 iliftA2 :: IApplicative f => (a -> b -> c) -> f i a -> f j b -> f (i :*: j) c
-iliftA2 g x y = g <:$> x <:*> y
+iliftA2 g x y = (imap g x) <:*> y
 
 ------------------------------------------------------------
 -- Turning normal functors into indexed ones

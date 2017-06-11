@@ -32,7 +32,7 @@ theAnim = movie
   where
     triangleA :: Diagram B
     triangleA = fromOffsets [unitX, unitY] # closeTrail # stroke
-    fadeIn d a  = opacity <:$> ((/d) <:$> interval 0 d) <:*> ipure a
+    fadeIn d a  = opacity <$> ((/d) <$> interval 0 d) <:*> ipure a
     fadeOut d a = active (toDuration d) (\t -> a # opacity (1 - t/d))
 
 main :: IO ()

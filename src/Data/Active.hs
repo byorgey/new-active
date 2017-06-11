@@ -122,6 +122,16 @@ instant = lasting 0
 
 -- | A constant value lasting for the specified duration.
 --
+--   This works particularly nicely with postfix function application, a
+--   la @(#)@ from the diagrams library.  For example:
+--
+--   c :: Active Rational F Char
+--   c = movie
+--     [ 'a' # lasting 2
+--     , 'b' # lasting 3
+--     , 'c' # lasting 1
+--     ]
+--
 --   @'lasting' d = 'active' (Duration d) . const = 'cut' d . always@
 lasting :: Num n => n -> a -> Active n F a
 lasting d = active (Duration d) . const

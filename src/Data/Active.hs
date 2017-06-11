@@ -32,6 +32,7 @@ module Data.Active
   , active, instant, lasting, always
   , ui, interval, dur
   , (<#>)
+  , discreteNE, discrete
 
     -- * Running/sampling
 
@@ -168,6 +169,29 @@ infixl 4 <#>
 --   > interval 3 5 <#> \t -> circle 1 # translateX t
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
+
+-- | Create a "discrete" 'Active' from a nonempty list of values.  The
+--   resulting 'Active' has duration 1, and takes on in turn each
+--   value from the list for a duration of \(1/n\), where \(n\) is the
+--   number of items in the list.
+--
+--   XXX picture --- show step function
+--
+--   If you want the result to last longer than 1 unit, you can use
+--   'stretch'.
+discreteNE :: (RealFrac n, Ord n) => NonEmpty a -> Active n F a
+discreteNE (a :| as) = (Active 1 f)
+  where
+    f t
+      | t == 1    = V.unsafeLast v
+      | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
+    v = V.fromList (a:as)
+
+-- | Like 'discreteNE', but with a list for convenience.  Calling
+--   'discrete' on the empty list is a runtime error.
+discrete :: (RealFrac n, Ord n) => [a] -> Active n F a
+discrete [] = error "Data.Active.discrete must be called with a non-empty list."
+discrete (a : as) = discreteNE (a :| as)
 
 --------------------------------------------------
 -- Running/sampling
@@ -397,7 +421,7 @@ instance (Num n, Ord n) => IApplicative (Active n) where
 
 -- | @'always' x@ creates an infinite 'Active' which is constantly
 --   'x'.  A synonym for 'ipure', but with no type class constraints
---   on @n@.
+--   on the numeric type @n@.
 always :: a -> Active n I a
 always a = Active Forever (const a)
 
@@ -438,6 +462,8 @@ stretch' s a@(Active (Duration d) f)
     | s < 0     = stretch (abs s) (backwards a)
     | otherwise = error "stretch' 0"
 
+-- | Flip an 'Active' value so it runs backwards.  For obvious
+--   reasons, this only works on finite 'Active'\s.
 backwards :: Num n => Active n F a -> Active n F a
 backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
 
@@ -447,18 +473,15 @@ matchDuration a@(Active (Duration d1) _) (Active (Duration d2) _) = stretch (d2/
 stretchTo :: (Ord n,  Fractional n) => n -> Active n F a -> Active n F a
 stretchTo n (Active (Duration d) f) = stretch (n/d) (Active (Duration d) f)
 
-discrete :: (RealFrac n, Ord n) => [a] -> Active n F a
-discrete [] = error "Data.Active.discrete must be called with a non-empty list."
-discrete xs = (Active 1 f)
-  where
-    f t
-      | t == 1    = V.unsafeLast v
-      | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
-    v = V.fromList xs
+-- | Take a "snapshot" of a given 'Active' at a particular time,
+--   freezing the resulting value into an infinite constant.
+--
+--   @snapshot t a = always (runActive a t)@
+snapshot :: (Fractional n, Ord n) => n -> Active n f a -> Active n I a
+snapshot t a = always (runActive a t)
 
-snapshot :: (Fractional n) => n -> Active n f a -> Active n I a
-snapshot t (Active _ f) = Active Forever (const (f t))
-
+-- | @cut d a@ cuts the given 'Active' @a@ to the specified duration
+--   @d@.  Has no effect if @a@ is already shorter than @d@.
 cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
 cut c (Active d f) = Active ((Duration c) `minDuration` d) f
 

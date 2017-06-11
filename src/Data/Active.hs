@@ -36,19 +36,17 @@ module Data.Active
 
   , runActive, start, end, simulate
 
-    -- * Combinators
-
-    -- ** Sequential composition
+    -- * Sequential composition
     -- $seq
 
   , (->-), (->>), (>>-), (-<>-)
   , movieNE, movie, Sequential(..)
 
-    -- ** Parallel composition
+    -- * Parallel composition
     -- $par
-  , (<+>), (<->), stackNE, stack
+  , (<+>), stackNE, stack, (<->)
 
-    -- ** Other combinators
+    -- * Other combinators
 
   , stretch, stretchTo, matchDuration
   , cut, backwards, snapshot
@@ -257,7 +255,7 @@ infix 4 -<>-
 
 -- | A newtype wrapper for finite 'Active' values.  The 'Semigroup'
 --   and 'Monoid' instances for this wrapper use sequential rather
---   than parallel composition.
+--   than parallel composition (specifically, ('->-')).
 newtype Sequential n a = Sequential { getSequential :: Active n F a }
 
 instance (Num n, Ord n, Semigroup a) => Semigroup (Sequential n a) where
@@ -334,7 +332,7 @@ instance (Monoid a, Semigroup a, Num n, Ord n) => Monoid (Active n F a) where
   mempty = instant mempty
   mappend = (<>)
 
--- | "Stack" a nonempty list of active values via unioning parallel
+-- | \"Stack\" a nonempty list of active values via unioning parallel
 --   composition.  This is actually just a synonym for 'sconcat'.
 stackNE :: (Semigroup a, Num n, Ord n) => NonEmpty (Active n f a) -> Active n f a
 stackNE = sconcat
@@ -360,7 +358,7 @@ instance (Num n, Ord n) => IApplicative (Active n) where
   ipure a = Active Forever (const a)
   Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
 
--- | Intersecting parallel composition.  The duration of @x <-> y@ is
+-- | Intersecting parallel composition.  The duration of @x '<->' y@ is
 --   the /minimum/ of the durations of @x@ and @y@.
 --
 --   Note that this is a special case of the 'IApplicative' instance
@@ -372,12 +370,23 @@ instance (Num n, Ord n) => IApplicative (Active n) where
 --------------------------------------------------
 -- Other combinators
 
+-- | Stretch an active value by a positive factor.  For example,
+--   @'stretch' 2 a@ is twice as long as @a@ (and hence half as fast).
+--   Conversely, @'stretch' (1/2) a@ is half as long as @a@, and hence
+--   twice as fast.
+--
+--   This actually works perfectly well on infinite active values,
+--   despite the fact that it no longer makes sense to say that the
+--   result is "x times as long" as the input; it simply stretches out
+--   the values along the number line.
 stretch :: (Fractional n, Ord n) => n -> Active n f a -> Active n f a
 stretch s a@(Active d f)
   | s <= 0 = error "Nonpositive stretch factor"
   | otherwise = Active (s *^ d) (\t -> f (t/s))
 
--- Allows negative stretching?
+-- | Like 'stretch', but allows negative stretch factors, which
+--   reverse the active.  As a result, it is restricted to only finite
+--   actives.
 stretch' :: (Fractional n, Ord n) => n -> Active n F a -> Active n F a
 stretch' s a@(Active (Duration d) f)
     | s > 0     = Active (Duration (d*s)) (f . (/s))

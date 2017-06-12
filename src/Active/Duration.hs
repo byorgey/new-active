@@ -2,21 +2,31 @@
 {-# LANGUAGE DeriveFunctor      #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE GADTs              #-}
+{-# LANGUAGE KindSignatures     #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies       #-}
 {-# LANGUAGE TypeOperators      #-}
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Data.Duration
--- Copyright   :  2017 XXX
+-- Module      :  Active.Duration
+-- Copyright   :  (c) 2017 Brent Yorgey
 -- License     :  BSD-style (see LICENSE)
--- Maintainer  :
+-- Maintainer  :  byorgey@gmail.com
 --
 -- A type for finite and infinite durations.
 -----------------------------------------------------------------------------
 
-module Data.Duration
-  ( Duration(..)
+module Active.Duration
+  ( -- * Finitude
+
+    Finitude(..)
+  , type (⊔)
+  , type (⊓)
+
+    -- * Duration
+
+  , Duration(..)
 
     -- * Conversion
 
@@ -31,6 +41,43 @@ module Data.Duration
 import           Data.Finitude
 
 import           Linear.Vector
+
+------------------------------------------------------------
+-- Finitude
+------------------------------------------------------------
+
+-- | A 'Finitude' value denotes whether something is finite ('F') or
+--   infinite ('I').  It exists mostly to be used as a lifted type
+--   index.
+data Finitude =
+    F    -- ^ Finite
+  | I    -- ^ Infinite
+
+-- | Union on finitudes. The union of an infinite thing with anything
+--   is infinite; the union of two finite things is finite.
+--
+--   Finitudes form a monoid under this operation with 'F' as the
+--   identity element.
+type family (f1 :: Finitude) ⊔ (f2 :: Finitude) :: Finitude where
+  f ⊔ f = f
+  F ⊔ f = f
+  I ⊔ f = I
+
+-- | Intersection on type-level finitudes.  This is not quite as
+--   straightforward as union: the intersection of a finite set with
+--   anything is finite, but we can't say anything in particular about
+--   the size of the intersection of two infinite sets.  However, we
+--   think of the finitudes as representing not arbitrary sets but
+--   potentially right-infinite intervals on the positive real line.
+--   In that case the intersection of two right-infinite intervals
+--   must be infinite.
+--
+--   This operation is associative; 'Finitude' forms a monoid under
+--   'Isect' with 'I' as the identity element.
+type family (f1 :: Finitude) ⊓ (f2 :: Finitude) :: Finitude where
+  f ⊓ f = f
+  F ⊓ f = F
+  I ⊓ g = g
 
 ------------------------------------------------------------
 -- Durations

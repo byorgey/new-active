@@ -11,24 +11,34 @@
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Data.Active
--- Copyright   :
+-- Module      :  Active
+-- Copyright   :  2011-2017 Brent Yorgey
 -- License     :  BSD-style (see LICENSE)
--- Maintainer  :
+-- Maintainer  :  byorgey@gmail.com
 --
+-- active is a small EDSL for building time-varying values of
+-- arbitrary type. It is particularly useful for building media such
+-- as animations, audio clips, and the like, but it is often useful to
+-- have other values that vary over time (vectors, colors, filters,
+-- volume levels...) and be able to create and use them in the service
+-- of constructing time-varying media.
+--
+-- XXX basic ideas.  Duration, time-invariant.  (After all, nothing
+-- constructed will really be fixed in time...)  Sequential and
+-- parallel composition.
 --
 -----------------------------------------------------------------------------
 
-module Data.Active
+module Active
   ( -- * Durations
     -- | Re-exported for convenience.
 
-    module Data.Duration
+    module Active.Duration
 
     -- * The Active type
   , Active
 
-    -- * Constructing
+    -- * Primitives
   , active, instant, lasting, always
   , ui, interval, dur
   , (<#>)

@@ -1,21 +1,48 @@
 name:                active
 version:             0.3
--- synopsis:
--- description:
+synopsis:            An EDSL for time-varying values.
+description:         active is a small EDSL for building time-varying values
+                     of arbitrary type. It is particularly useful for
+                     building media such as animations, audio clips,
+                     and the like, but it is often useful to have
+                     other values that vary over time (vectors,
+                     colors, filters, volume levels...) and be able to
+                     create and use them in the service of
+                     constructing time-varying media.
 license:             BSD3
 license-file:        LICENSE
 author:              Brent Yorgey
 maintainer:          byorgey@gmail.com
--- copyright:
+copyright:           (c) 2011-2017 Brent Yorgey
 category:            Data
 build-type:          Simple
--- extra-source-files:
 cabal-version:       >=1.10
+extra-source-files:  CHANGES, README.markdown, diagrams/*.svg
+extra-doc-files:     diagrams/*.svg
+tested-with:         GHC == 8.0.1
+bug-reports:         https://github.com/diagrams/active/issues
+source-repository head
+  type:     git
+  location: https://github.com/diagrams/active.git
 
 library
-  exposed-modules:     Control.IApplicative, Data.Active, Data.Finitude, Data.Duration
-  -- other-modules:
-  other-extensions:    ConstraintKinds, DataKinds, FlexibleContexts, FlexibleInstances, GADTs, KindSignatures, MultiParamTypeClasses, PolyKinds, RankNTypes, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+  exposed-modules:     Control.IApplicative,
+                       Data.Active,
+                       Data.Finitude,
+                       Data.Duration
+  other-extensions:    ConstraintKinds,
+                       DataKinds,
+                       FlexibleContexts,
+                       FlexibleInstances,
+                       GADTs,
+                       KindSignatures,
+                       MultiParamTypeClasses,
+                       PolyKinds,
+                       RankNTypes,
+                       StandaloneDeriving,
+                       TypeFamilies,
+                       TypeOperators,
+                       UndecidableInstances
   build-depends:       base >=4.8 && <4.10,
                        semigroups >= 0.18,
                        vector >= 0.11,

@@ -311,7 +311,43 @@ simulate n (Active Forever      f) = map f [0, 1/n ..]
 -- Sequential composition
 
 -- $seq
--- This is a paragraph about sequential composition.
+--
+-- Composing 'Active' values sequentially means placing them
+-- end-to-end so one occurs after the other.  The most basic
+-- sequential composition operator is ('->-'), which does exactly
+-- that.
+--
+-- The only nuance is what happens at the precise point of overlap
+-- (recall that finite 'Active' values are defined on a /closed/
+-- interval).  If using a floating-point duration type, it probably
+-- doesn't matter what happens at the precise point of overlap, since
+-- the probability of sampling at that exact point is very small; but
+-- if using rational durations it might matter quite a bit, since one
+-- might sample at a frame rate which evenly divides the durations
+-- used in constructing the 'Active', and hence always sample
+-- precisely on the points of overlap between primitive 'Active'
+-- values.
+--
+-- The answer is that ('->-') requires a 'Semigroup' instance for the
+-- type 'a', and when composing @x ->- y@, the value at the end of @x@
+-- will be combined with the value at the start of @y@ using ('<>').
+-- If @a@ does not have a 'Semigroup' instance, one can, for example,
+-- wrap it in 'Last', so that the value from @x@ will be ignored and
+-- the value from @y@ taken. In fact, the ('->>') and ('>>-')
+-- operators are provided for convenience which handle this common
+-- situation; ('->>') uses the starting value from its right-hand
+-- argument at the point of overlap, throwing away the ending value
+-- from its left-hand argument (using 'Last'); ('>>-') does the
+-- converse (using 'First').
+--
+-- Finite 'Active' values form a semigroup under horizontal
+-- composition as long as the value type @a@ is a 'Semigroup';
+-- additionally, if @a@ is a 'Monoid', then finite active values are
+-- as well, with @'instant' 'mempty'@ as the identity.  However, the
+-- 'Semigroup' and 'Monoid' instances for 'Active' are for parallel
+-- rather than sequential composition.  The instances with sequential
+-- composition are instead defined for the 'Sequential' newtype
+-- wrapper.
 
 infixr 4 ->-, ->>, >>-, -<>-
 
@@ -323,22 +359,6 @@ infixr 4 ->-, ->>, >>-, -<>-
 --   is the composition of @x@ and @y@'s values under ('<>').
 --
 --   Note that @x@ must be finite, but @y@ may be infinite.
---
---   See also ('-<>-'), where the final value of @x@ "accumulates".
---   In the case that the values of @x@ and @y@ do not have a
---   'Semigroup' instance, one can, for example, wrap them in 'Last',
---   so that the value from @x@ will be ignored and the value from @y@
---   taken. In fact, the ('->>') and ('>>-') operators are provided
---   for convenience which handle this common situation.
---
---   Finite active values form a semigroup under horizontal
---   composition as long as the value type @a@ is a 'Semigroup';
---   additionally, if @a@ is a 'Monoid', then finite active values are
---   as well, with @'instant' 'mempty'@ as the identity.  However, the
---   'Semigroup' and 'Monoid' instances for 'Active' are for parallel
---   rather than sequential composition.  The instances with
---   sequential composition are instead defined for the 'Sequential'
---   newtype wrapper.
 (->-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 (Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (addDuration d1 d2) f
   where
@@ -347,14 +367,14 @@ infixr 4 ->-, ->>, >>-, -<>-
         | otherwise = f2 (n - n1)
 
 -- | Sequential composition, preferring the value from the right-hand
---   argument at the instant of overlap; see ('->-').
+--   argument at the instant of overlap.
 --
 --   XXX example / (picture)
 (->>) :: forall n f a. (Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (Last a))
 
 -- | Sequential composition, preferring the value from the left-hand
---   argument at the instant of overlap; see ('->-').
+--   argument at the instant of overlap.
 (>>-) :: forall n f a. (Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
 a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (First a))
 

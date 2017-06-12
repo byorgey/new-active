@@ -278,7 +278,7 @@ discrete (a : as) = discreteNE (a :| as)
 runActive :: Ord n => Active n f a -> n -> a
 runActive (Active d f) t
   = case compareDuration (Duration t) d of
-      GT -> error "Active value evaluated past its duration."
+      GT -> error "Active.runActive: Active value evaluated past its duration."
       _  -> f t
 
 -- | Like 'runActive', but return a total function that returns
@@ -428,6 +428,8 @@ instance (Num n, Ord n, Monoid a, Semigroup a) => Monoid (Sequential n a) where
   mempty  = Sequential (instant mempty)
   mappend = (<>)
 
+-- XXX should we have variants of 'movie' and friends that work like ->> ?
+
 -- | Sequence a nonempty list of finite actives together, via ('->-'),
 --   but using a balanced fold (which can be more efficient than the
 --   usual linear fold).
@@ -453,7 +455,7 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- | A variant of 'sequenceNE' defined on lists instead of 'NonEmpty'
 --   for convenience; @movie []@ is a runtime error.
 movie :: (Num n, Ord n, Semigroup a) => [Active n F a] -> Active n F a
-movie []     = error "Can't make empty movie!"
+movie []     = error "Active.movie: Can't make empty movie!"
 movie (a:as) = movieNE (a :| as)
 
 --------------------------------------------------
@@ -554,7 +556,7 @@ infixr 6 <->
 --   the values along the number line.
 stretch :: (Fractional n, Ord n) => n -> Active n f a -> Active n f a
 stretch s a@(Active d f)
-  | s <= 0 = error "Nonpositive stretch factor"
+  | s <= 0 = error "Active.stretch: Nonpositive stretch factor.  Use stretch' instead."
   | otherwise = Active (s *^ d) (\t -> f (t/s))
 
 -- | Like 'stretch', but allows negative stretch factors, which
@@ -564,7 +566,7 @@ stretch' :: (Fractional n, Ord n) => n -> Active n F a -> Active n F a
 stretch' s a@(Active (Duration d) f)
     | s > 0     = Active (Duration (d*s)) (f . (/s))
     | s < 0     = stretch (abs s) (backwards a)
-    | otherwise = error "stretch' 0"
+    | otherwise = error "Active.stretch': stretch factor of 0"
 
 -- | Flip an 'Active' value so it runs backwards.  For obvious
 --   reasons, this only works on finite 'Active'\s.

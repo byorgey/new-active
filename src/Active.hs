@@ -75,9 +75,10 @@ import           Data.Coerce
 
 import           Data.List.NonEmpty   (NonEmpty (..))
 import qualified Data.List.NonEmpty   as NE
+import           Data.Maybe (fromJust)
 import           Data.Semigroup
-import           Linear.Vector
 import qualified Data.Vector          as V
+import           Linear.Vector
 
 import           Control.IApplicative
 import           Active.Duration
@@ -288,6 +289,11 @@ runActiveMaybe (Active d f) t
       GT -> Nothing
       _  -> Just (f t)
 
+-- | Like 'runActiveMaybe', but return an 'Option' instead of 'Maybe'.
+--   Sometimes this is more convenient since the 'Monoid' instance XXX
+runActiveOption :: Ord n => Active n f a -> n -> Option a
+runActiveOption a = Option . runActiveMaybe a
+
 -- | Extract the value at the beginning of an 'Active'.
 start :: Num n => Active n f a -> a
 start (Active _ f) = f 0
@@ -462,12 +468,10 @@ infixr 6 <+>
       => Active n f1 a -> Active n f2 a -> Active n (f1 ⊔ f2) a
 a1@(Active d1 _) <+> a2@(Active d2 _)
   = Active (d1 `maxDuration` d2)
-           (\t -> case (runActiveMaybe a1 t, runActiveMaybe a2 t) of
-                    (Just b1, Just b2) -> b1 <> b2
-                    (Just b, _)        -> b
-                    (_, Just b)        -> b
-           )
-                    -- (Nothing, Nothing) case can't happen.
+           (\t -> fromJust . getOption $ runActiveOption a1 t <> runActiveOption a2 t)
+                  -- fromJust is safe since the (Nothing, Nothing) case
+                  -- can't happen: at least one of a1 or a2 will be defined everywhere
+                  -- on the interval between 0 and the maximum of their durations.
 
 -- | If @a@ is a 'Semigroup', then 'Active n f a' forms a 'Semigroup'
 --   under unioning parallel composition.  Notice that the two

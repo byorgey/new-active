@@ -308,10 +308,17 @@ end (Active (Duration d) f) = f d
 --   times \( 0, \frac 1 f, \frac 2 f, \dots \), ending at the last multiple of
 --   \(1/f\) which is not greater than the duration.  The list will be
 --   infinite iff the 'Active' is.
-simulate :: (Eq n, Fractional n, Enum n) => n -> Active n f a -> [a]
-simulate 0 _ = error "Frame rate can't equal zero"
-simulate n (Active (Duration d) f) = map f [0, 1/n .. d]
-simulate n (Active Forever      f) = map f [0, 1/n ..]
+simulate :: (Ord n, Fractional n, Enum n) => n -> Active n f a -> [a]
+simulate 0 _ = error "Active.simulate: Frame rate can't equal zero"
+simulate n (Active (Duration d) f) = map f . takeWhile (<= d) . map (/n) $ [0 ..]
+
+  -- We'd like to just say (map f [0, 1/n .. d]) above but that
+  -- doesn't work, because of the weird behavior of Enum with floating
+  -- point: the last element of the list might actually be a bit
+  -- bigger than d.  This way we also avoid the error that can
+  -- accumulate by repeatedly adding 1/n.
+
+simulate n (Active Forever      f) = map (f . (/n)) $ [0 ..]
 
 --------------------------------------------------
 -- Sequential composition

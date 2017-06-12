@@ -263,7 +263,7 @@ discreteNE (a :| as) = (Active 1 f)
 -- | Like 'discreteNE', but with a list for convenience.  Calling
 --   'discrete' on the empty list is a runtime error.
 discrete :: (RealFrac n, Ord n) => [a] -> Active n F a
-discrete [] = error "Data.Active.discrete must be called with a non-empty list."
+discrete [] = error "Active.discrete must be called with a non-empty list."
 discrete (a : as) = discreteNE (a :| as)
 
 --------------------------------------------------

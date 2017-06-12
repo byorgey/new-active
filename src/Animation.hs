@@ -12,8 +12,7 @@ import           Diagrams.TrailLike
 
 import           Control.Applicative  (liftA2)
 import           Control.IApplicative hiding ((<*>))
-import           Data.Active
-import           Data.Finitude
+import           Active
 import           Data.Monoid
 
 type QAnimation t f b v n m = Active t f (QDiagram b v n m)

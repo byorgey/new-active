@@ -1,7 +1,8 @@
 name:                active
 version:             0.3
 synopsis:            An EDSL for time-varying values.
-description:         active is a small EDSL for building time-varying values
+description:         active is a small EDSL for building continuous,
+                     time-varying values
                      of arbitrary type. It is particularly useful for
                      building media such as animations, audio clips,
                      and the like, but it is often useful to have
@@ -27,9 +28,8 @@ source-repository head
 
 library
   exposed-modules:     Control.IApplicative,
-                       Data.Active,
-                       Data.Finitude,
-                       Data.Duration
+                       Active,
+                       Active.Duration
   other-extensions:    ConstraintKinds,
                        DataKinds,
                        FlexibleContexts,

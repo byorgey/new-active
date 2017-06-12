@@ -9,8 +9,7 @@ import           Text.Printf
 import qualified Animation                   as A
 import           Control.IApplicative
 import           Control.Monad               (forM_)
-import           Data.Active
-import           Data.Finitude
+import           Active
 
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Prelude            hiding (interval, simulate, ui, (->>),

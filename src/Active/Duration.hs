@@ -14,7 +14,7 @@
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  byorgey@gmail.com
 --
--- A type for finite and infinite durations.
+-- Finite and infinite durations.
 -----------------------------------------------------------------------------
 
 module Active.Duration
@@ -30,15 +30,13 @@ module Active.Duration
 
     -- * Conversion
 
-  , toDuration, fromDuration, fromFDuration
+  , toDuration, fromDuration, fromDurationF
 
     -- * Operations
 
   , addDuration, maxDuration, minDuration, compareDuration
 
   ) where
-
-import           Data.Finitude
 
 import           Linear.Vector
 
@@ -72,8 +70,8 @@ type family (f1 :: Finitude) ⊔ (f2 :: Finitude) :: Finitude where
 --   In that case the intersection of two right-infinite intervals
 --   must be infinite.
 --
---   This operation is associative; 'Finitude' forms a monoid under
---   'Isect' with 'I' as the identity element.
+--   This operation is associative; 'Finitude' forms a monoid with 'I'
+--   as the identity element.
 type family (f1 :: Finitude) ⊓ (f2 :: Finitude) :: Finitude where
   f ⊓ f = f
   F ⊓ f = F
@@ -87,7 +85,7 @@ type family (f1 :: Finitude) ⊓ (f2 :: Finitude) :: Finitude where
 --   numeric type @n@.  The type index @f@ indicates whether the
 --   duration is finite or infinite.  The infinite duration is longer
 --   than any finite duration.
-data Duration f n where
+data Duration :: Finitude -> * -> * where
 
   -- | A finite duration of a given nonnegative length.  The length
   --   could be zero.
@@ -108,8 +106,8 @@ instance Eq n => Eq (Duration f n) where
   Forever     == Forever     = True
 
 -- | Note that the 'Ord' instance for 'Duration' is not quite as
---   useful as one might like, because it forces the type indices to
---   be the same, so it can only be used to compare two finite or two
+--   useful as one might like: it forces the type indices to be the
+--   same, so it can only be used to compare two finite or two
 --   infinite durations.  To compare durations in general, use
 --   'compareDuration'.
 instance Ord n => Ord (Duration f n) where
@@ -123,19 +121,18 @@ compareDuration (Duration _)  Forever       = LT
 compareDuration Forever       (Duration _)  = GT
 compareDuration (Duration n1) (Duration n2) = compare n1 n2
 
--- XXX make an Additive instance instead of Num?
-
 -- | /Finite/ durations inherit the additive structure of the
---   underlying numeric type.  (Note that it does not actually make
---   sense to multiply durations.)  To add durations in general, see
---   'addDuration'.
+--   underlying numeric type.  (Note that it does not make sense to
+--   multiply durations, but you can scale them by a constant using
+--   the ('*^') operator from the 'Additive' instance.) To add
+--   durations in general (finite or infinite), see 'addDuration'.
 --
 --   This instance also gives us the convenience of 'fromInteger', so
 --   numeric literals can be used as finite durations.
 instance Num n => Num (Duration F n) where
   fromInteger               = toDuration . fromInteger
-  negate = error "use negated to negate a duration"
-  (+)    = error "use ^+^ to add durations"
+  negate (Duration d)       = Duration (negate d)
+  Duration d1 + Duration d2 = Duration (d1 + d2)
   (*)    = error "multiplying durations makes no sense"
   abs (Duration n)          = Duration (abs n)
   signum = error "signum on durations makes no sense"
@@ -148,13 +145,15 @@ toDuration :: n -> Duration F n
 toDuration = Duration
 
 -- | An unwrapper function to turn a duration into a numeric value.
+--   Finite durations become @Just@; the infinite duration becomes
+--   @Nothing@.
 fromDuration :: Duration f n -> Maybe n
 fromDuration Forever      = Nothing
 fromDuration (Duration n) = Just n
 
 -- | Like 'fromDuration' when you know you have a finite duration.
-fromFDuration :: Duration F n -> n
-fromFDuration (Duration n) = n
+fromDurationF :: Duration F n -> n
+fromDurationF (Duration n) = n
 
 -- | Add two durations.  If either one is infinite, so is the result;
 --   finite durations add normally.

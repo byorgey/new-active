@@ -16,22 +16,26 @@
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  byorgey@gmail.com
 --
--- active is a small EDSL for building time-varying values of
--- arbitrary type. It is particularly useful for building media such
--- as animations, audio clips, and the like, but it is often useful to
--- have other values that vary over time (vectors, colors, filters,
--- volume levels...) and be able to create and use them in the service
--- of constructing time-varying media.
+-- active is a small EDSL for building continuous, time-varying values
+-- of arbitrary type. It is particularly useful for building media
+-- such as animations, audio clips, and the like, but it is often
+-- useful to have other values that vary over time (vectors, colors,
+-- filters, volume levels...) and be able to create and use them in
+-- the service of constructing time-varying media.
 --
 -- XXX basic ideas.  Duration, time-invariant.  (After all, nothing
 -- constructed will really be fixed in time...)  Sequential and
 -- parallel composition.
 --
+-- Rational vs. floating-point durations.
+--
 -----------------------------------------------------------------------------
 
 module Active
   ( -- * Durations
-    -- | Re-exported for convenience.
+
+    -- | The module defining durations and operations on them is
+    --   re-exported for convenience.
 
     module Active.Duration
 
@@ -39,7 +43,8 @@ module Active
   , Active
 
     -- * Primitives
-  , active, instant, lasting, always
+  , activeF, activeI, active
+  , instant, lasting, always
   , ui, interval, dur
   , (<#>)
   , discreteNE, discrete
@@ -56,12 +61,14 @@ module Active
 
     -- * Parallel composition
     -- $par
+
   , (<+>), stackNE, stack, (<->)
 
     -- * Other combinators
 
   , stretch, stretchTo, matchDuration
   , cut, backwards, snapshot
+
   ) where
 
 import           Data.Coerce
@@ -70,11 +77,11 @@ import           Data.List.NonEmpty   (NonEmpty (..))
 import qualified Data.List.NonEmpty   as NE
 import           Data.Semigroup
 import           Linear.Vector
-
-import           Data.Duration
-import           Control.IApplicative
-import           Data.Finitude
 import qualified Data.Vector          as V
+
+import           Control.IApplicative
+import           Active.Duration
+
 
 -- XXX go through and include diagrams of everything!
 
@@ -87,9 +94,7 @@ import qualified Data.Vector          as V
 --
 --   * @f@ is an index indicating whether the duration is finite or
 --   infinite.
---   * @n@ is the numeric type used for durations.  Any numeric type
---     can be used, although it makes the most sense for types with
---     decidable equality, such as 'Rational'.
+--   * @n@ is the numeric type used for durations.
 --   * @a@ is the type of the values.
 --
 --   If the duration is infinite, it can be thought of as a function
@@ -98,15 +103,35 @@ import qualified Data.Vector          as V
 --   particular that the interval is /closed/ on both ends: the
 --   function is defined at \(0\) as well as at the duration \(d\)).
 --
---   @Active n f@ is a @Functor@, and @Active n@ is an 'IFunctor' and
---   'IApplicative' (the 'IApplicative' instance in particular is how
---   one does parallel composition of actives).  XXX mention Semigroup
+--   @Active n f@ is a @Functor@, and @Active n@ is an 'IApplicative';
+--   if @a@ is a 'Semigroup' then @Active n f a@ is as well.  These
+--   instances are described in much more detail in the sections on
+--   sequential and parallel composition below.
 --
 --   This definition is intentionally abstract, since the
 --   implementation may change in the future to enable additional
---   optimizations.  To construct an 'Active' value, see the 'active'
---   function as well as 'ui', 'interval', 'dur', 'discrete',
---   and the various combinators.
+--   optimizations.
+--
+--   Semantically, an 'Active' only needs to be defined on the
+--   interval \([0,d]\), although in Haskell there is no way to
+--   enforce this with types.  For example,
+--
+--   > activeF 3 (\d -> if d <= 3 then d*2 else error "o noes!")
+--
+--   is considered a well-defined, total 'Active' value, even though
+--   the provided Haskell function is partial.  Because 'Active' is
+--   abstract, it is impossible to ever observe the value of an
+--   'Active' past its duration.
+--
+--   > > let a = activeF 3 (\d -> if d <= 5 then d*2 else error "o noes!")
+--   > > runActive a 4
+--   > *** Exception: Active value evaluated past its duration.
+--
+--   Even though in this example the provided Haskell function is
+--   defined at the value 4 (in particular it is equal to 8), it is
+--   impossible to observe this since the 'Active' has a duration of
+--   only 3.
+
 data Active :: * -> Finitude -> * -> * where
   Active   :: Duration f n -> (n -> a) -> Active n f a
   deriving Functor
@@ -114,21 +139,57 @@ data Active :: * -> Finitude -> * -> * where
 --------------------------------------------------
 -- Constructing
 
--- | Constructor for 'Active' values, given a duration \(d\) and a
---   function from \([0,d] \to a\).  The given function need not be
---   defined outside the interval, although in Haskell there is no way
---   to indicate this in the types.  For example,
+-- | Smart constructor for finite 'Active' values, given a finite
+--   numeric duration \(d\) and a function from \([0,d] \to a\).
 --
---   > active 3 (\d -> if d <= 3 then d*2 else error "o noes!")
+--   For example:
 --
---   is a well-defined, total 'Active' value.  Because 'Active' is
---   abstract, it is impossible to ever observe the value of an
---   'Active' past its duration.
+--   > > let act = activeF (2*pi) (\d -> sin d + cos d) :: Active Double F Double
+--   > > mapM_ putStrLn $ simulate 4 (act <#> (\x -> replicate (8 + round (4*x)) '*'))
+--   > ************
+--   > *************
+--   > *************
+--   > **************
+--   > **************
+--   > *************
+--   > ************
+--   > ***********
+--   > **********
+--   > *********
+--   > *******
+--   > ******
+--   > *****
+--   > ****
+--   > ***
+--   > **
+--   > **
+--   > ***
+--   > ***
+--   > ****
+--   > *****
+--   > *******
+--   > ********
+--   > *********
+--   > ***********
+--   > ************
 --
---   > > let a = active 3 (\d -> if d <= 5 then d*2 else error "o noes!")
---   > > runActive a 4
---   > *** Exception: Active value evaluated past its duration.
+--   Satisfies the law:
+--
+--   @'activeF' d f = 'interval' d '<#>' f@
 
+activeF :: n -> (n -> a) -> Active n F a
+activeF n = Active (Duration n)
+
+-- | Smart constructor for infinite 'Active' values, given a total
+--   function of type \(n \to a\) giving a value of type \(a\) at every
+--   time.
+--
+--   <<#diagram=testDia&width=200>>
+activeI :: (n -> a) -> Active n I a
+activeI = Active Forever
+
+-- | Generic smart constructor for 'Active' values, given a 'Duration'
+--   and a function on the appropriate interval.
 active :: Duration f n -> (n -> a) -> Active n f a
 active = Active
 
@@ -150,9 +211,10 @@ instant = lasting 0
 --   >   , 'c' # lasting 1
 --   >   ]
 --
---   @'lasting' d = 'active' (Duration d) . const = 'cut' d . always@
+-- @'lasting' d = 'activeF' d . const
+--          = 'cut' d . always@
 lasting :: Num n => n -> a -> Active n F a
-lasting d = active (Duration d) . const
+lasting d = activeF d . const
 
 -- | The unit interval: the identity function on the interval \( [0,1] \).
 ui :: Num n => Active n F n
@@ -181,8 +243,8 @@ infixl 4 <#>
 (<#>) = flip (<$>)
 
 -- | Create a "discrete" 'Active' from a nonempty list of values.  The
---   resulting 'Active' has duration 1, and takes on in turn each
---   value from the list for a duration of \(1/n\), where \(n\) is the
+--   resulting 'Active' has duration 1, and takes on eavh value from
+--   the list in turn for a duration of \(1/n\), where \(n\) is the
 --   number of items in the list.
 --
 --   XXX picture --- show step function
@@ -419,7 +481,8 @@ stack = sconcat . NE.fromList
 instance IFunctor (Active n) where
   imap f (Active d1 g) = Active d1 (f . g)
 
--- | 'Active n' is an 'IApplicative', somewhat akin to 'ZipList':
+-- | @'Active' n@ is an 'IApplicative', somewhat akin to 'ZipList':
+--
 --   * 'ipure' creates an infinite constant value.
 --   * @f '<:*>' x@ applies @f@ to @x@ pointwise, taking the minimum
 --     duration of @f@ and @x@.
@@ -509,3 +572,9 @@ cut c (Active d f) = Active ((Duration c) `minDuration` d) f
 
 -}
 
+----------------------------------------------------------------------
+-- diagrams-haddock illustrations.  The code is not included in the
+-- typeset documentation.
+--
+-- > testDia :: Diagram B
+-- > testDia = circle 1 # fc blue # frame 0.1

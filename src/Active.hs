@@ -72,6 +72,7 @@ module Active
   ) where
 
 import           Data.Coerce
+import           Unsafe.Coerce
 
 import           Data.List.NonEmpty   (NonEmpty (..))
 import qualified Data.List.NonEmpty   as NE
@@ -134,8 +135,62 @@ import           Active.Duration
 --   only 3.
 
 data Active :: * -> Finitude -> * -> * where
-  Active   :: Duration f n -> (n -> a) -> Active n f a
-  deriving Functor
+  Prim    :: Duration f n -> (n -> a) -> Active n f a
+  Fmap    :: Duration f n
+          -> (a -> b) -> Active n f a -> Active n f b
+  Seq     :: Semigroup a => Duration f n
+          -> Active n F a -> Active n f a -> Active n f a
+  SeqR    :: Duration f n
+          -> Active n F a -> Active n f a -> Active n f a
+  SeqL    :: Duration f n
+          -> Active n F a -> Active n f a -> Active n f a
+  Pure    :: a -> Active n I a
+  Ap      :: Duration (f1 ⊓ f2) n
+          -> Active n f1 (a -> b) -> Active n f2 a -> Active n (f1 ⊓ f2) b
+  Par     :: Semigroup a => Duration (f1 ⊔ f2) n
+          -> Active n f1 a -> Active n f2 a -> Active n (f1 ⊔ f2) a
+  Rev     :: Active n F a -> Active n F a
+  Str     :: Duration f n -> n -> Active n f a -> Active n f a
+  Cut     :: Duration F n -> Active n f a -> Active n F a
+
+-- Unexported.  We could get around the need for this with some
+-- type-level proofs using singleton machinery and so on, but meh.
+assertFinite :: Active n f a -> Active n F a
+assertFinite = unsafeCoerce
+
+getDuration :: Active n f a -> Duration f n
+getDuration (Prim d _)   = d
+getDuration (Fmap d _ _) = d
+getDuration (Seq d _ _)  = d
+getDuration (SeqR d _ _) = d
+getDuration (SeqL d _ _) = d
+getDuration (Pure _)     = Forever
+getDuration (Ap d _ _)   = d
+getDuration (Par d _ _)  = d
+getDuration (Rev a)      = getDuration a
+getDuration (Str d _ _)  = d
+getDuration (Cut d _)    = d
+
+instance Functor (Active n f) where
+  fmap f (Fmap d g a) = Fmap d (f . g) a
+  fmap f a            = Fmap (getDuration a) f a
+
+-- instance Applicative (Active n I) where
+
+instance IFunctor (Active n) where
+  imap = fmap
+
+-- | @'Active' n@ is an 'IApplicative', somewhat akin to 'ZipList':
+--
+--   * 'ipure' creates an infinite constant value.
+--   * @f '<:*>' x@ applies @f@ to @x@ pointwise, taking the minimum
+--     duration of @f@ and @x@.
+instance (Num n, Ord n) => IApplicative (Active n) where
+  type Id = I
+  type (:*:) i j = i ⊓ j
+
+  ipure = Pure
+  f <:*> x = Ap (minDuration (getDuration f) (getDuration x)) f x
 
 --------------------------------------------------
 -- Constructing
@@ -179,7 +234,7 @@ data Active :: * -> Finitude -> * -> * where
 --   @'activeF' d f = 'interval' d '<#>' f@
 
 activeF :: n -> (n -> a) -> Active n F a
-activeF n = Active (Duration n)
+activeF n = Prim (Duration n)
 
 -- | Smart constructor for infinite 'Active' values, given a total
 --   function of type \(n \to a\) giving a value of type \(a\) at every
@@ -187,12 +242,12 @@ activeF n = Active (Duration n)
 --
 --   <<#diagram=testDia&width=200>>
 activeI :: (n -> a) -> Active n I a
-activeI = Active Forever
+activeI = Prim Forever
 
 -- | Generic smart constructor for 'Active' values, given a 'Duration'
 --   and a function on the appropriate interval.
 active :: Duration f n -> (n -> a) -> Active n f a
-active = Active
+active = Prim
 
 -- | A value of duration zero.
 --
@@ -243,6 +298,10 @@ infixl 4 <#>
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
 
+
+--- XXX TODO: redo discreteNE as a sequential composition rather than
+--- as a single Prim
+
 -- | Create a "discrete" 'Active' from a nonempty list of values.  The
 --   resulting 'Active' has duration 1, and takes on eavh value from
 --   the list in turn for a duration of \(1/n\), where \(n\) is the
@@ -253,7 +312,7 @@ infixl 4 <#>
 --   If you want the result to last longer than 1 unit, you can use
 --   'stretch'.
 discreteNE :: (RealFrac n, Ord n) => NonEmpty a -> Active n F a
-discreteNE (a :| as) = (Active 1 f)
+discreteNE (a :| as) = activeF 1 f
   where
     f t
       | t == 1    = V.unsafeLast v
@@ -275,32 +334,118 @@ discrete (a : as) = discreteNE (a :| as)
 --   attempting to evaluate a finite active past its duration results
 --   in a runtime error. (Unfortunately, in Haskell it would be very
 --   difficult to rule this out statically.)
-runActive :: Ord n => Active n f a -> n -> a
-runActive (Active d f) t
-  = case compareDuration (Duration t) d of
+runActive :: forall n f a. (Fractional n, Ord n) => Active n f a -> n -> a
+runActive a t
+  = case compareDuration (Duration t) (getDuration a) of
       GT -> error "Active.runActive: Active value evaluated past its duration."
-      _  -> f t
+      _  -> go a t
+  where
+    go :: Active n f' a' -> n -> a'
+    go (Prim _ f)    t = f t
+    go (Fmap _ f a)  t = f (go a t)
+
+    go (Seq _ a1 a2) t
+      | t <  d1   = go a1 t
+      | t == d1   = go a1 t <> go a2 (t - d1)
+      | otherwise = go a2 (t - d1)
+      where
+        Duration d1 = getDuration a1
+    go (SeqR _ a1 a2) t
+      | t < d1    = go a1 t
+      | otherwise = go a2 t
+      where
+        Duration d1 = getDuration a1
+    go (SeqL _ a1 a2) t
+      | t <= d1   = go a1 t
+      | otherwise = go a2 t
+      where
+        Duration d1 = getDuration a1
+
+    go (Pure a) _   = a
+    go (Ap _ af ax)  t = go af t (go ax t)
+    go (Par _ a1 a2) t =
+      let t' = Duration t in
+      case (compareDuration t' (getDuration a1), compareDuration t' (getDuration a2)) of
+        (LT, LT) -> go a1 t <> go a2 t
+        (LT, _ ) -> go a1 t
+        (_ , LT) -> go a2 t
+        _        -> error "Active.runActive: internal error, duration past both in Par"
+    go (Rev a) t =
+      let Duration d = getDuration a in
+      go a (d - t)
+    go (Str _ k a) t = go a (t/k)
+    go (Cut _ a) t   = go a t
 
 -- | Like 'runActive', but return a total function that returns
 --   @Nothing@ when queried outside its range.
-runActiveMaybe :: Ord n => Active n f a -> n -> Maybe a
-runActiveMaybe (Active d f) t
-  = case compareDuration (Duration t) d of
+runActiveMaybe :: (Fractional n, Ord n) => Active n f a -> n -> Maybe a
+runActiveMaybe a t
+  = case compareDuration (Duration t) (getDuration a) of
       GT -> Nothing
-      _  -> Just (f t)
+      _  -> Just $ runActive a t
 
 -- | Like 'runActiveMaybe', but return an 'Option' instead of 'Maybe'.
 --   Sometimes this is more convenient since the 'Monoid' instance XXX
-runActiveOption :: Ord n => Active n f a -> n -> Option a
+runActiveOption :: (Fractional n, Ord n) => Active n f a -> n -> Option a
 runActiveOption a = Option . runActiveMaybe a
 
 -- | Extract the value at the beginning of an 'Active'.
-start :: Num n => Active n f a -> a
-start (Active _ f) = f 0
+start :: (Fractional n, Ord n) => Active n f a -> a
+start (Prim _ f)    = f 0
+start (Fmap _ f a)  = f (start a)
+start (Seq _ a1 a2) =
+  case getDuration a1 of
+    Duration 0 -> start a1 <> start a2
+    _          -> start a1
+start (SeqR _ a1 a2) =
+  case getDuration a1 of
+    Duration 0 -> start a2
+    _          -> start a1
+start (SeqL _ a1 _) = start a1
+start (Pure a)      = a
+start (Ap _ a1 a2)  = start a1 (start a2)
+start (Par _ a1 a2) = start a1 <> start a2
+start (Rev a)       = end a
+start (Str _ _ a)   = start a
+start (Cut _ a)     = start a
 
 -- | Extract the value at the end of a finite 'Active'.
-end :: Active n F a -> a
-end (Active (Duration d) f) = f d
+end :: (Fractional n, Ord n) => Active n F a -> a
+end (Prim (Duration d) f) = f d
+end (Fmap _ f a)          = f (end a)
+end (Seq _ a1 a2) =
+  case getDuration a2 of
+    Duration 0 -> end a1 <> end a2
+    _          -> end a2
+end (SeqR _ _ a2) = end a2
+end (SeqL _ a1 a2) =
+  case getDuration a2 of
+    Duration 0 -> end a1
+    _          -> end a2
+end (Ap _ af ax) =
+  case compareDuration (getDuration af) (getDuration ax) of
+
+    -- Since the argument to end must be finite, the argument to Ap
+    -- with the shorter duration must be finite (or both if they have
+    -- the same duration).
+    LT -> let Duration afd = getDuration af in (end (assertFinite af)) (runActive ax afd)
+    GT -> let Duration axd = getDuration ax in (runActive af axd) (end (assertFinite ax))
+    EQ -> end (assertFinite af) (end (assertFinite ax))
+
+end (Par _ a1 a2) =
+  case compareDuration (getDuration a1) (getDuration a2) of
+    LT -> end a2F
+    GT -> end a1F
+    EQ -> end a1F <> end a2F
+  where
+    -- We know end takes a finite Active, and the parallel composition
+    -- of two things can only be finite if both are finite.
+    a1F = assertFinite a1
+    a2F = assertFinite a2
+
+end (Rev a)     = start a
+end (Str _ _ a) = end a
+end (Cut (Duration d) a) = runActive a d
 
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the number
@@ -308,17 +453,44 @@ end (Active (Duration d) f) = f d
 --   times \( 0, \frac 1 f, \frac 2 f, \dots \), ending at the last multiple of
 --   \(1/f\) which is not greater than the duration.  The list will be
 --   infinite iff the 'Active' is.
-simulate :: (Ord n, Fractional n, Enum n) => n -> Active n f a -> [a]
+simulate :: forall n f a. (Ord n, RealFrac n, Enum n) => n -> Active n f a -> [a]
 simulate 0 _ = error "Active.simulate: Frame rate can't equal zero"
-simulate n (Active (Duration d) f) = map f . takeWhile (<= d) . map (/n) $ [0 ..]
+simulate frames a = go False 0 (1/frames) a
+  where
 
-  -- We'd like to just say (map f [0, 1/n .. d]) above but that
-  -- doesn't work, because of the weird behavior of Enum with floating
-  -- point: the last element of the list might actually be a bit
-  -- bigger than d.  This way we also avoid the error that can
-  -- accumulate by repeatedly adding 1/n.
+    -- argh, have to keep track of beginning and ending offset!
 
-simulate n (Active Forever      f) = map (f . (/n)) $ [0 ..]
+    -- Keep track of:
+    --   currently reversed or not
+    --   start offset
+    --   end offset
+    --   frame length
+
+    go :: Bool -> n -> n -> Active n f' a' -> [a']
+    go rev offset frameLen (Prim d f) = case d of
+      -- XXX fix for rev
+      Duration d -> map f . takeWhile (<= d) . map ((offset+) . (/frames)) $ [0 ..]
+      Forever    -> map (f . (offset+) . (/frames)) $ [0 ..]
+    go rev offset frameLen (Fmap _ f a) = map f (go rev offset frames a)
+
+      -- XXX have to deal with potential overlap! ugh.
+      -- XXX fix for rev!
+    go rev offset frameLen (Seq _ a1 a2) = go rev offset frames a1 ++ go rev offset' frames a2
+      where
+        Duration d1 = getDuration a1
+        offset'     = frameLen - mod' (d1 - offset) frameLen
+
+        mod' n d = n - fromInteger (floor (n/d)) * d
+
+--    go offset frameLen (SeqR _ a1 a2)
+--    go offset frameLen (SeqL _ a1 a2)
+
+    go _ _ _ (Pure a) = repeat a
+    go rev offset frameLen (Ap _ af ax)  = undefined
+    go rev offset frameLen (Par _ a1 a2) = undefined
+    go rev offset frameLen (Rev a)       = go (not rev) offset frameLen a  -- XXX offset?
+    go rev offset frameLen (Str _ k a)   = go rev (offset/k) (frameLen/k) a
+    go rev offset frameLen (Cut (Duration d) a)     = undefined
 
 --------------------------------------------------
 -- Sequential composition
@@ -373,23 +545,19 @@ infixr 4 ->-, ->>, >>-, -<>-
 --
 --   Note that @x@ must be finite, but @y@ may be infinite.
 (->-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
-(Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (addDuration d1 d2) f
-  where
-    f n | n <  n1   = f1 n
-        | n == n1   = f1 n <> f2 0
-        | otherwise = f2 (n - n1)
+a1 ->- a2 = Seq (addDuration (getDuration a1) (getDuration a2)) a1 a2
 
 -- | Sequential composition, preferring the value from the right-hand
 --   argument at the instant of overlap.
 --
 --   XXX example / (picture)
 (->>) :: forall n f a. (Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
-a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (Last a))
+a1 ->> a2 = SeqR (addDuration (getDuration a1) (getDuration a2)) a1 a2
 
 -- | Sequential composition, preferring the value from the left-hand
 --   argument at the instant of overlap.
 (>>-) :: forall n f a. (Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
-a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (First a))
+a1 >>- a2 = SeqL (addDuration (getDuration a1) (getDuration a2)) a1 a2
 
 -- | Accumulating sequential composition.
 --
@@ -410,11 +578,8 @@ a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (First a))
 --   @(-<>-)@ satisfies the law:
 --
 --   @x -<>- y = x ->> (('end' x '<>') '<$>' y)@
-(-<>-) :: (Semigroup a, Num n, Ord n) => Active n F a -> Active n f a -> Active n f a
-(Active d1@(Duration n1) f1) -<>- (Active d2 f2) = Active (addDuration d1 d2) f
-  where
-    f n | n < n1  = f1 n
-        | n >= n1 = f1 n1 <> f2 (n - n1)
+(-<>-) :: (Semigroup a, Fractional n, Ord n) => Active n F a -> Active n f a -> Active n f a
+a1 -<>- a2 = a1 ->> ((end a1 <>) <$> a2)
 
 -- | A newtype wrapper for finite 'Active' values.  The 'Semigroup'
 --   and 'Monoid' instances for this wrapper use sequential rather
@@ -475,12 +640,7 @@ infixr 6 <+>
 --   defined, its value is simply copied.
 (<+>) :: (Semigroup a, Num n, Ord n)
       => Active n f1 a -> Active n f2 a -> Active n (f1 ⊔ f2) a
-a1@(Active d1 _) <+> a2@(Active d2 _)
-  = Active (d1 `maxDuration` d2)
-           (\t -> fromJust . getOption $ runActiveOption a1 t <> runActiveOption a2 t)
-                  -- fromJust is safe since the (Nothing, Nothing) case
-                  -- can't happen: at least one of a1 or a2 will be defined everywhere
-                  -- on the interval between 0 and the maximum of their durations.
+a1 <+> a2 = Par (maxDuration (getDuration a1) (getDuration a2)) a1 a2
 
 -- | If @a@ is a 'Semigroup', then 'Active n f a' forms a 'Semigroup'
 --   under unioning parallel composition.  Notice that the two
@@ -511,25 +671,11 @@ stack = sconcat . NE.fromList
 ----------------------------------------
 -- Intersecting parallel composition
 
-instance IFunctor (Active n) where
-  imap f (Active d1 g) = Active d1 (f . g)
-
--- | @'Active' n@ is an 'IApplicative', somewhat akin to 'ZipList':
---
---   * 'ipure' creates an infinite constant value.
---   * @f '<:*>' x@ applies @f@ to @x@ pointwise, taking the minimum
---     duration of @f@ and @x@.
-instance (Num n, Ord n) => IApplicative (Active n) where
-  type Id = I
-  type (:*:) i j = i ⊓ j
-  ipure = always
-  Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
-
 -- | @'always' x@ creates an infinite 'Active' which is constantly
 --   'x'.  A synonym for 'ipure', but with no type class constraints
 --   on the numeric type @n@.
 always :: a -> Active n I a
-always a = Active Forever (const a)
+always a = activeI (const a)
 
 infixr 6 <->
 
@@ -555,29 +701,35 @@ infixr 6 <->
 --   result is "x times as long" as the input; it simply stretches out
 --   the values along the number line.
 stretch :: (Fractional n, Ord n) => n -> Active n f a -> Active n f a
-stretch s a@(Active d f)
+stretch s a
   | s <= 0 = error "Active.stretch: Nonpositive stretch factor.  Use stretch' instead."
-  | otherwise = Active (s *^ d) (\t -> f (t/s))
+  | otherwise = Str (s *^ getDuration a) s a
 
 -- | Like 'stretch', but allows negative stretch factors, which
 --   reverse the active.  As a result, it is restricted to only finite
 --   actives.
 stretch' :: (Fractional n, Ord n) => n -> Active n F a -> Active n F a
-stretch' s a@(Active (Duration d) f)
-    | s > 0     = Active (Duration (d*s)) (f . (/s))
+stretch' s a
+    | s > 0     = stretch s a
     | s < 0     = stretch (abs s) (backwards a)
     | otherwise = error "Active.stretch': stretch factor of 0"
+
 
 -- | Flip an 'Active' value so it runs backwards.  For obvious
 --   reasons, this only works on finite 'Active'\s.
 backwards :: Num n => Active n F a -> Active n F a
-backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
+backwards = Rev
 
 matchDuration :: (Ord n, Fractional n) => Active n F a -> Active n F a -> Active n F a
-matchDuration a@(Active (Duration d1) _) (Active (Duration d2) _) = stretch (d2/d1) a
+matchDuration a1 a2 = stretch (d2/d1) a1
+  where
+    Duration d1 = getDuration a1
+    Duration d2 = getDuration a2
 
 stretchTo :: (Ord n,  Fractional n) => n -> Active n F a -> Active n F a
-stretchTo n (Active (Duration d) f) = stretch (n/d) (Active (Duration d) f)
+stretchTo n a = stretch (n/d) a
+  where
+    Duration d = getDuration a
 
 -- | Take a "snapshot" of a given 'Active' at a particular time,
 --   freezing the resulting value into an infinite constant.
@@ -589,7 +741,7 @@ snapshot t a = always (runActive a t)
 -- | @cut d a@ cuts the given 'Active' @a@ to the specified duration
 --   @d@.  Has no effect if @a@ is already shorter than @d@.
 cut :: (Num n, Ord n) => n -> Active n f a -> Active n F a
-cut c (Active d f) = Active ((Duration c) `minDuration` d) f
+cut c a = Cut (Duration c `minDuration` getDuration a) a
 
 --------------------------------------------------
 
@@ -611,3 +763,4 @@ cut c (Active d f) = Active ((Duration c) `minDuration` d) f
 --
 -- > testDia :: Diagram B
 -- > testDia = circle 1 # fc blue # frame 0.1
+

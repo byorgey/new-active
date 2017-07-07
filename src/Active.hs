@@ -46,6 +46,7 @@ module Active
   , activeF, activeI, active
   , instant, lasting, always
   , ui, interval, dur
+  , sin', cos'
   , (<#>)
   , discreteNE, discrete
 
@@ -75,13 +76,13 @@ import           Data.Coerce
 
 import           Data.List.NonEmpty   (NonEmpty (..))
 import qualified Data.List.NonEmpty   as NE
-import           Data.Maybe (fromJust)
+import           Data.Maybe           (fromJust)
 import           Data.Semigroup
 import qualified Data.Vector          as V
 import           Linear.Vector
 
-import           Control.IApplicative
 import           Active.Duration
+import           Control.IApplicative
 
 
 -- XXX go through and include diagrams of everything!
@@ -220,6 +221,14 @@ lasting d = activeF d . const
 -- | The unit interval: the identity function on the interval \( [0,1] \).
 ui :: Num n => Active n F n
 ui = active 1 id
+
+-- | An infinite sine wave with a period of @1@, that is, \( t \mapsto \sin(2\pi t) \).  XXX something about Rational time.
+sin' :: Floating n => Active Rational I n
+sin' = dur <#> \n -> sin (2*pi*fromRational n)
+
+-- | An infinite cosine wave with a period of @1@, that is, \( t \mapsto \cos(2\pi t) \).
+cos' :: Floating n => Active Rational I n
+cos' = dur <#> \n -> cos (2*pi*fromRational n)
 
 -- | @interval a b@ varies linearly from \( a \) to \( b \) over a
 --   duration of \( b - a \).  That is, it represents the function \( d \mapsto a + d \).

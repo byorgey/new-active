@@ -23,24 +23,39 @@
 -- filters, volume levels...) and be able to create and use them in
 -- the service of constructing time-varying media.
 --
--- XXX basic ideas.  Duration, time-invariant.  (After all, nothing
--- constructed will really be fixed in time...)  Sequential and
--- parallel composition.
+-- Some of the important concepts/features of the library include:
 --
--- Rational vs. floating-point durations.
+-- * Every 'Active' value has a /duration/, which is either a
+--   nonnegative number, or infinity.
+-- * An 'Active' value with duration
+--   \(d\) can be thought of as a function \([0,d] \to a\), assigning a
+--   value to each instant on the closed interval \([0,d]\).
+-- * 'Active' values are /time-invariant/, that is, they do not have a
+--   fixed, absolute starting time.  Put another way, time is always
+--   relative: one can say that `a` should start two seconds after `b`,
+--   but one cannot say that `a` should start at time 20 and `b` at
+--   time 22.
+-- * 'Active' values can be composed both in sequence and in parallel,
+--   with special attention paid to how underlying values should be
+--   composed when there is overlap.
+-- * The library supports any duration type which is an instance of
+--   'RealFrac'.  In particular, both 'Double' and 'Rational' may be
+--   used as the type of durations; the latter is particuarly useful
+--   for frame-accurate rendering.
+--
+-- XXX examples/tutorial
 --
 -----------------------------------------------------------------------------
 
 module Active
   ( -- * Durations
+    -- | A few things are re-exported from the "Active.Duration"
+    --   module for convenience.
 
-    -- | The module defining durations and operations on them is
-    --   re-exported for convenience.
-
-    module Active.Duration
+    Finitude(..), Duration(..), toDuration
 
     -- * The Active type
-  , Active
+  , Active, ActDF, ActDI, ActRF, ActRI
 
     -- * Primitives
   , activeF, activeI, active

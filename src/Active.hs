@@ -78,7 +78,7 @@ module Active
     -- * Parallel composition
     -- $par
 
-  , (<+>), stackNE, stack, (<->)
+  , (<⊔>), stackNE, stack, (<⊓>)
 
     -- * Other combinators
 
@@ -133,16 +133,20 @@ import           Control.IApplicative
 --   interval \([0,d]\), although in Haskell there is no way to
 --   enforce this with types.  For example,
 --
---   > activeF 3 (\d -> if d <= 3 then d*2 else error "o noes!")
+-- @
+-- activeF 3 (\d -> if d <= 3 then d*2 else error "o noes!")
+-- @
 --
 --   is considered a well-defined, total 'Active' value, even though
 --   the provided Haskell function is partial.  Because 'Active' is
 --   abstract, it is impossible to ever observe the value of an
 --   'Active' past its duration.
 --
---   > > let a = activeF 3 (\d -> if d <= 5 then d*2 else error "o noes!")
---   > > runActive a 4
---   > *** Exception: Active value evaluated past its duration.
+-- @
+-- >>> let a = activeF 3 (\d -> if d <= 5 then d*2 else error "o noes!")
+-- >>> runActive a 4
+-- *** Exception: Active value evaluated past its duration.
+-- @
 --
 --   Even though in this example the provided Haskell function is
 --   defined at the value 4 (in particular it is equal to 8), it is
@@ -153,46 +157,54 @@ data Active :: * -> Finitude -> * -> * where
   Active   :: Duration f n -> (n -> a) -> Active n f a
   deriving Functor
 
+type ActDF = Active Double F
+type ActDI = Active Double I
+type ActRF = Active Rational F
+type ActRI = Active Rational I
+
 --------------------------------------------------
 -- Constructing
 
 -- | Smart constructor for finite 'Active' values, given a finite
 --   numeric duration \(d\) and a function from \([0,d] \to a\).
 --
---   For example:
---
---   > > let act = activeF (2*pi) (\d -> sin d + cos d) :: Active Double F Double
---   > > mapM_ putStrLn $ simulate 4 (act <#> (\x -> replicate (8 + round (4*x)) '*'))
---   > ************
---   > *************
---   > *************
---   > **************
---   > **************
---   > *************
---   > ************
---   > ***********
---   > **********
---   > *********
---   > *******
---   > ******
---   > *****
---   > ****
---   > ***
---   > **
---   > **
---   > ***
---   > ***
---   > ****
---   > *****
---   > *******
---   > ********
---   > *********
---   > ***********
---   > ************
---
 --   Satisfies the law:
 --
 --   @'activeF' d f = 'interval' d '<#>' f@
+--
+--   Example:
+--
+--   @
+--   >>> let act = activeF (2*pi) (\d -> sin d + cos d) :: ActDF Double
+--   >>> let ht x = 8 + round (4*x)
+--   >>> mapM_ putStrLn $ simulate 4 (act <#> \x -> replicate (ht x) '*')
+--   ************
+--   *************
+--   *************
+--   **************
+--   **************
+--   *************
+--   ************
+--   ***********
+--   **********
+--   *********
+--   *******
+--   ******
+--   *****
+--   ****
+--   ***
+--   **
+--   **
+--   ***
+--   ***
+--   ****
+--   *****
+--   *******
+--   ********
+--   *********
+--   ***********
+--   ************
+--   @
 
 activeF :: n -> (n -> a) -> Active n F a
 activeF n = Active (Duration n)
@@ -201,7 +213,7 @@ activeF n = Active (Duration n)
 --   function of type \(n \to a\) giving a value of type \(a\) at every
 --   time.
 --
---   <<#diagram=testDia&width=200>>
+--   <<diagrams/src_Active_testDia.svg#diagram=testDia&width=200>>
 activeI :: (n -> a) -> Active n I a
 activeI = Active Forever
 
@@ -221,12 +233,14 @@ instant = lasting 0
 --   This works particularly nicely with postfix function application, a
 --   la @(#)@ from the diagrams library.  For example:
 --
---   > c :: Active Rational F Char
---   > c = movie
---   >   [ 'a' # lasting 2
---   >   , 'b' # lasting 3
---   >   , 'c' # lasting 1
---   >   ]
+--   @
+--   c :: Active Rational F Char
+--   c = movie
+--     [ 'a' # lasting 2
+--     , 'b' # lasting 3
+--     , 'c' # lasting 1
+--     ]
+--   @
 --
 -- @'lasting' d = 'activeF' d . const
 --          = 'cut' d . always@
@@ -263,7 +277,7 @@ infixl 4 <#>
 --   'interval', or 'dur', and then applying a function to it. For
 --   example:
 --
---   > interval 3 5 <#> \t -> circle 1 # translateX t
+--   @interval 3 5 <#> \t -> circle 1 # translateX t@
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
 
@@ -423,13 +437,15 @@ a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active n f (First a))
 --
 --   XXX look into actual executable doc examples
 --
---   > > let x = active 3 Sum :: Active Rational F (Sum Rational)
---   > > let a1 = x ->- x
---   > > let a2 = x -<>- x
---   > > map (numerator . getSum . runActive a1) [0 .. 6]
---   >   [0,1,2,3,1,2,3]
---   > > map (numerator . getSum . runActive a2) [0 .. 6]
---   >   [0,1,2,3,4,5,6]
+--   @
+--   >>> let x = active 3 Sum :: Active Rational F (Sum Rational)
+--   >>> let a1 = x ->- x
+--   >>> let a2 = x -<>- x
+--   >>> map (numerator . getSum . runActive a1) [0 .. 6]
+--     [0,1,2,3,1,2,3]
+--   >>> map (numerator . getSum . runActive a2) [0 .. 6]
+--     [0,1,2,3,4,5,6]
+--   @
 --
 --   @(-<>-)@ satisfies the law:
 --
@@ -491,15 +507,15 @@ movie (a:as) = movieNE (a :| as)
 ----------------------------------------
 -- Unioning parallel composition
 
-infixr 6 <+>
+infixr 6 <⊔>
 
--- | Unioning parallel composition.  The duration of @x <+> y@ is the
+-- | Unioning parallel composition.  The duration of @x <⊔> y@ is the
 --   /maximum/ of the durations of @x@ and @y@.  Where they are both
 --   defined, the values are combined with ('<>').  Where only one is
 --   defined, its value is simply copied.
-(<+>) :: (Semigroup a, Num n, Ord n)
+(<⊔>) :: (Semigroup a, Num n, Ord n)
       => Active n f1 a -> Active n f2 a -> Active n (f1 ⊔ f2) a
-a1@(Active d1 _) <+> a2@(Active d2 _)
+a1@(Active d1 _) <⊔> a2@(Active d2 _)
   = Active (d1 `maxDuration` d2)
            (\t -> fromJust . getOption $ runActiveOption a1 t <> runActiveOption a2 t)
                   -- fromJust is safe since the (Nothing, Nothing) case
@@ -509,10 +525,10 @@ a1@(Active d1 _) <+> a2@(Active d2 _)
 -- | If @a@ is a 'Semigroup', then 'Active n f a' forms a 'Semigroup'
 --   under unioning parallel composition.  Notice that the two
 --   arguments of ('<>') are restricted to be either both finite or
---   both infinite; ('<+>') is strictly more general since it can
+--   both infinite; ('<⊔>') is strictly more general since it can
 --   combine active values with different finitudes.
 instance (Semigroup a, Num n, Ord n) => Semigroup (Active n f a) where
-  (<>) = (<+>)
+  (<>) = (<⊔>)
 
 -- | If @a@ is a 'Monoid', then 'Active n F a' forms a 'Monoid' under
 --   unioning parallel composition.  The identity element is
@@ -555,16 +571,16 @@ instance (Num n, Ord n) => IApplicative (Active n) where
 always :: a -> Active n I a
 always a = Active Forever (const a)
 
-infixr 6 <->
+infixr 6 <⊓>
 
--- | Intersecting parallel composition.  The duration of @x '<->' y@ is
+-- | Intersecting parallel composition.  The duration of @x '<⊓>' y@ is
 --   the /minimum/ of the durations of @x@ and @y@.
 --
 --   Note that this is a special case of the 'IApplicative' instance
 --   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
-(<->) :: (Semigroup a, Num n, Ord n)
+(<⊓>) :: (Semigroup a, Num n, Ord n)
       => Active n f1 a -> Active n f2 a -> Active n (f1 ⊓ f2) a
-(<->) = iliftA2 (<>)
+(<⊓>) = iliftA2 (<>)
 
 --------------------------------------------------
 -- Other combinators

@@ -78,6 +78,8 @@ module Active
     -- * Parallel composition
     -- $par
 
+  , IApplicative(..)
+
   , (<⊔>), stackNE, stack, (<⊓>)
 
     -- * Other combinators
@@ -270,7 +272,7 @@ interval a b = active (toDuration (b - a)) (a+)
 dur :: Active n I n
 dur = active Forever id
 
-infixl 4 <#>
+infixl 8 <#>
 
 -- | Backwards 'fmap', that is, a synonym for @'flip' ('<$>')@.  This
 --   can be useful when starting from some 'Active' like 'ui',
@@ -278,6 +280,9 @@ infixl 4 <#>
 --   example:
 --
 --   @interval 3 5 <#> \t -> circle 1 # translateX t@
+--
+--   ('<#>') has the same precedence as ('#') (@infixl 8@) for the
+--   same reasons.
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
 
@@ -468,7 +473,11 @@ instance (Num n, Ord n, Monoid a, Semigroup a) => Monoid (Sequential n a) where
   mempty  = Sequential (instant mempty)
   mappend = (<>)
 
--- XXX should we have variants of 'movie' and friends that work like ->> ?
+-- XXX should we have variants of 'movie' and friends that work like
+-- ->> ?  YES, we should!  Otherwise you e.g. get weird "blips" when
+-- diagrams are superimposed with each other.  Maybe this should be the default?
+
+-- Combinator for combining an (infinite) background with finite stuff.
 
 -- | Sequence a nonempty list of finite actives together, via ('->-'),
 --   but using a balanced fold (which can be more efficient than the

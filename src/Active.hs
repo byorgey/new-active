@@ -66,7 +66,7 @@ module Active
   , runActive, runActiveMay, runActiveOpt
   , withActive
   , duration, durationF
-  , start, end, sample
+  , start, end, samples
 
     -- * Sequential composition
     -- $seq
@@ -180,7 +180,7 @@ type ActI = Active 'I
 --
 --   >>> let act = activeF (2*pi) (\d -> sin d + cos d) :: ActF Double
 --   >>> let ht x = 8 + round (4*x)
---   >>> mapM_ putStrLn $ sample 4 (act <#> \x -> replicate (ht x) '*')
+--   >>> mapM_ putStrLn $ samples 4 (act <#> \x -> replicate (ht x) '*')
 --   ************
 --   *************
 --   *************
@@ -412,9 +412,9 @@ runActiveOpt a = Option . runActiveMay a
 --   to have a default duration of 3.
 --
 --   >>> let makeFinite :: Active f a -> ActF a; makeFinite = withActive id (cut 3)
---   >>> sample 1 (makeFinite (lasting 7 'a'))
+--   >>> samples 1 (makeFinite (lasting 7 'a'))
 --   "aaaaaaaa"
---   >>> sample 1 (makeFinite (always 'a'))
+--   >>> samples 1 (makeFinite (always 'a'))
 --   "aaaa"
 
 withActive :: (Active 'F a -> b) -> (Active 'I a -> b) -> Active f a -> b
@@ -456,17 +456,17 @@ end (Active (Duration d) f) = f d
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
 --   "frame rate", or number of samples per unit time.  That is,
---   @sample f a@ samples @a@ at times
+--   @samples f a@ samples @a@ at times
 --   \( 0, \frac 1 f, \frac 2 f, \dots \),
 --   ending at the last multiple of \(1/f\) which is not
---   greater than the duration.  The list will be infinite iff the
---   'Active' is.
+--   greater than the duration.  The list of samples will be infinite
+--   iff the 'Active' is.
 --
---   >>> sample 2 (interval 0 3 <#> (^2) :: ActF Double)
+--   >>> samples 2 (interval 0 3 <#> (^2) :: ActF Double)
 --   [0.0,0.25,1.0,2.25,4.0,6.25,9.0]
-sample :: Real d => d -> Active f a -> [a]
-sample 0  _ = error "Active.sample: Frame rate can't equal zero"
-sample fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
+samples :: Real d => d -> Active f a -> [a]
+samples 0  _ = error "Active.samples: Frame rate can't equal zero"
+samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
 
   -- We'd like to just say (map f [0, 1/n .. d]) above but that
   -- doesn't work, because of the weird behavior of Enum with floating
@@ -474,7 +474,7 @@ sample fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational 
   -- bigger than d.  This way we also avoid the error that can
   -- accumulate by repeatedly adding 1/n.
 
-sample fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
+samples fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
 
 --------------------------------------------------
 -- Sequential composition
@@ -557,9 +557,9 @@ a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (First a))
 --   >>> let x = active 3 Sum :: ActF (Sum Rational)
 --   >>> let a1 = x ->- x
 --   >>> let a2 = x -<>- x
---   >>> map (numerator . getSum) (sample 1 a1)
+--   >>> map (numerator . getSum) (samples 1 a1)
 --   [0,1,2,3,1,2,3]
---   >>> map (numerator . getSum) (sample 1 a2)
+--   >>> map (numerator . getSum) (samples 1 a2)
 --   [0,1,2,3,4,5,6]
 --
 --   @(-<>-)@ satisfies the law:
@@ -833,7 +833,7 @@ cut c (Active d f) = Active ((Duration $ toRational c) `minDuration` d) f
 -- >     base act = mconcat
 -- >       [ closedPt # moveTo (0 ^& start act)
 -- >       , zipWith (^&) (map fromRational [0, pd ..])
--- >                      (sample (1/pd) (act # cut 5.5))
+-- >                      (samples (1/pd) (act # cut 5.5))
 -- >         # cubicSpline False
 -- >         # lc red
 -- >       , axes

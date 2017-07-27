@@ -63,10 +63,10 @@ module Active
 
     -- * Running/sampling
 
-  , runActive, runActiveMaybe, runActiveOption
+  , runActive, runActiveMay, runActiveOpt
   , withActive
   , duration, durationF
-  , start, end, simulate
+  , start, end, sample
 
     -- * Sequential composition
     -- $seq
@@ -79,7 +79,7 @@ module Active
 
   , IApplicative(..)
 
-  , (<⊔>), stackNE, stack, (<⊓>)
+  , parU, (<∪>), stackNE, stack, parI, (<∩>)
 
     -- * Other combinators
 
@@ -107,12 +107,11 @@ import           Control.IApplicative
 --  Active
 ------------------------------------------------------------
 
--- | A value of type @Active n f a@ is a time-varying value of type
+-- | A value of type @Active f a@ is a time-varying value of type
 --   @a@ with a given duration.
 --
 --   * @f@ is an index indicating whether the duration is finite or
 --   infinite.
---   * @n@ is the numeric type used for durations.
 --   * @a@ is the type of the values.
 --
 --   If the duration is infinite, it can be thought of as a function
@@ -121,8 +120,8 @@ import           Control.IApplicative
 --   particular that the interval is /closed/ on both ends: the
 --   function is defined at \(0\) as well as at the duration \(d\)).
 --
---   @Active n f@ is a @Functor@, and @Active n@ is an 'IApplicative';
---   if @a@ is a 'Semigroup' then @Active n f a@ is as well.  These
+--   @Active f@ is a @Functor@, and @Active@ is an 'IApplicative';
+--   if @a@ is a 'Semigroup' then @Active f a@ is as well.  These
 --   instances are described in much more detail in the sections on
 --   sequential and parallel composition below.
 --
@@ -144,9 +143,9 @@ import           Control.IApplicative
 --   'Active' past its duration.
 --
 -- @
--- >>> let a = activeF 3 (\d -> if d <= 5 then d*2 else error "o noes!")
--- >>> runActive a 4
--- *** Exception: Active value evaluated past its duration.
+-- >> let a = activeF 3 (\d -> if d <= 5 then d*2 else error "o noes!")
+-- >> runActive a 4
+-- *** Exception: Active.runActive: Active value evaluated past its duration.
 -- @
 --
 --   Even though in this example the provided Haskell function is
@@ -159,11 +158,13 @@ data Active :: Finitude -> * -> * where
   deriving Functor
 
 -- | The type of finite 'Active' values; a convenient synonym for
---   @Active 'F@.
+--   @Active 'F@, so you can use the library without having to turn on
+--   @DataKinds@.
 type ActF = Active 'F
 
 -- | The type of infinite 'Active' values; a convenient synonym for
---   @Active 'I@.
+--   @Active 'I@, so you can use the library without having to turn on
+--   @DataKinds@.
 type ActI = Active 'I
 
 --------------------------------------------------
@@ -172,17 +173,14 @@ type ActI = Active 'I
 -- | Smart constructor for finite 'Active' values, given a finite
 --   numeric duration \(d\) and a function from \([0,d] \to a\).
 --
---   Satisfies the laws:
---
 --   @'activeF' d f = ('cut' d 'dur')    '<#>' f
 --            = ('interval' 0 d) '<#>' f@
 --
 --   Example:
 --
---   @
---   >>> let act = 'activeF' (2*pi) (\d -> sin d + cos d) :: ActF Double
+--   >>> let act = activeF (2*pi) (\d -> sin d + cos d) :: ActF Double
 --   >>> let ht x = 8 + round (4*x)
---   >>> mapM_ putStrLn $ 'simulate' 4 (act '<#>' \\x -> replicate (ht x) \'*\')
+--   >>> mapM_ putStrLn $ sample 4 (act <#> \x -> replicate (ht x) '*')
 --   ************
 --   *************
 --   *************
@@ -209,7 +207,6 @@ type ActI = Active 'I
 --   *********
 --   ***********
 --   ************
---   @
 
 activeF :: RealFrac d => d -> (d -> a) -> Active 'F a
 activeF d f = Active (Duration (toRational d)) (f . fromRational)
@@ -231,63 +228,81 @@ active d f = Active (toRational <$> d) (f . fromRational)
 --
 --   <<diagrams/src_Active_instantDia.svg#diagram=instantDia&width=200>>
 --
---   > instantDia = illustrateActF (instant 2)
+--   > instantDia = illustrateActive (instant 2)
 
 instant :: a -> Active 'F a
 instant = lasting 0
 
 -- | A constant value lasting for the specified duration.
 --
---   This works particularly nicely with postfix function application, a
---   la @(#)@ from the diagrams library.  For example:
+--   This reads particularly nicely when used with postfix function
+--   application, a la @(#)@ from the diagrams library.  For example:
 --
 --   @
---   c :: ActF Char
---   c = movie
---     [ 'a' # lasting 2
---     , 'b' # lasting 3
---     , 'c' # lasting 1
---     ]
---   @
+-- c :: ActF Char
+-- c = movie
+--   [ 'a' # lasting 2
+--   , 'b' # lasting 3
+--   , 'c' # lasting 1
+--   ]
+-- @
 --
 -- @'lasting' d = 'activeF' d . const
 --          = 'cut' d . always@
 --
---  <<diagrams/src_Active_lastingDia.svg#diagram=lastingDia&width=200>>
+--   <<diagrams/src_Active_lastingDia.svg#diagram=lastingDia&width=200>>
 --
--- > lastingDia = illustrateActF (2 # lasting 3)
+--   > lastingDia = illustrateActive (2 # lasting 3)
 
 lasting :: Rational -> a -> Active 'F a
 lasting d = activeF d . const
 
--- XXX could make this take any Real d, but then we are likely to get
--- lots of warnings like "defaulting to Double..." when we say e.g.
--- '... # lasting 3'
-
 -- | The unit interval: the identity function on the interval \( [0,1] \).
 --
 --   <<diagrams/src_Active_uiDia.svg#diagram=uiDia&width=200>>
+--
+--   > uiDia = illustrateActiveR ui
 ui :: Active 'F Rational
 ui = active 1 id
 
--- | An infinite sine wave with a period of @1@, that is, \( t \mapsto
--- \sin(2\pi t) \).  XXX something about Rational time.
+-- | An infinite sine wave with a period of @1@, that is,
+--   \( d \mapsto \sin(2\pi d) \).  This can be convenient when
+--   creating repetitive behavior with a period measured in whole
+--   number units.
+--
+--   <<diagrams/src_Active_sin'Dia.svg#diagram=sin'Dia&width=200>>
+--
+--   > sin'Dia = illustrateActive' 0.1 sin'
 sin' :: Floating n => Active 'I n
 sin' = dur <#> \n -> sin (2*pi*fromRational n)
 
--- | An infinite cosine wave with a period of @1@, that is, \( t
--- \mapsto \cos(2\pi t) \).
+-- | An infinite cosine wave with a period of @1@, that is,
+--   \( d \mapsto \cos(2\pi d) \).   This can be convenient when
+--   creating repetitive behavior with a period measured in whole
+--   number units.
+--
+--   <<diagrams/src_Active_cos'Dia.svg#diagram=cos'Dia&width=200>>
+--
+--   > cos'Dia = illustrateActive' 0.1 cos'
 cos' :: Floating n => Active 'I n
 cos' = dur <#> \n -> cos (2*pi*fromRational n)
 
 -- | @interval a b@ varies linearly from \( a \) to \( b \) over a
 --   duration of \( b - a \).  That is, it represents the function \( d \mapsto a + d \).
+--
+--   <<diagrams/src_Active_intervalDia.svg#diagram=intervalDia&width=200>>
+--
+--   > intervalDia = illustrateActive (interval 1 4)
 interval :: RealFrac d => d -> d -> Active 'F d
 interval a b = active (toDuration (b - a)) (a+)
 
 -- | @dur@ is the infinite active value representing the function
 --   \( d \mapsto d \).  It is called @dur@ since it can be thought of as
 --   representing "the current duration" at any point in time.
+--
+--   <<diagrams/src_Active_durDia.svg#diagram=durDia&width=200>>
+--
+--   > durDia = illustrateActiveR dur
 dur :: Active 'I Rational
 dur = active Forever fromRational
 
@@ -298,10 +313,21 @@ infixl 8 <#>
 --   'interval', or 'dur', and then applying a function to it. For
 --   example:
 --
---   @interval 3 5 <#> \t -> circle 1 # translateX t@
+--   @interval 3 5 '<#>' \\t -> circle 1 # translateX t@
 --
---   ('<#>') has the same precedence as ('#') (@infixl 8@) for the
---   same reasons.
+--   produces a circle translated continuously from 3 to 5 along the
+--   x-axis.
+--
+--   ('<#>') has the same precedence as ('#') from the diagrams
+--   library (namely, @infixl 8@) for the same reason: so an 'Active'
+--   build via ('<#>') can be combined with others via infix
+--   combinators such as 'parI' without needing parentheses.
+--
+--   <<diagrams/src_Active_pamfDia.svg#diagram=pamfDia&width=200>>
+--
+--   > pamfDia = illustrateActive' 0.1 . fmap getSum $
+--   >   interval 0 3 <#> Sum `parI` sin' <#> Sum
+
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
 
@@ -337,6 +363,13 @@ discrete (a : as) = discreteNE (a :| as)
 --   attempting to evaluate a finite active past its duration results
 --   in a runtime error. (Unfortunately, in Haskell it would be very
 --   difficult to rule this out statically.)
+--
+--   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: ActF String
+--   >>> runActive act 1
+--   "hello"
+--   >>> runActive act 4
+--   "world"
+
 runActive :: Real d => Active f a -> (d -> a)
 runActive (Active d f) t
   = case compareDuration (Duration t') d of
@@ -347,18 +380,42 @@ runActive (Active d f) t
 
 -- | Like 'runActive', but return a total function that returns
 --   @Nothing@ when queried outside its range.
-runActiveMaybe :: Real d => Active f a -> (d -> Maybe a)
-runActiveMaybe (Active d f) t
+--
+--   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: ActF String
+--   >>> runActiveMay act 1
+--   Just "hello"
+--   >>> runActiveMay act 4
+--   Just "world"
+--   >>> runActiveMay act 6
+--   Nothing
+
+runActiveMay :: Real d => Active f a -> (d -> Maybe a)
+runActiveMay (Active d f) t
   = case compareDuration (Duration t') d of
       GT -> Nothing
       _  -> Just (f t')
   where
     t' = toRational t
 
--- | Like 'runActiveMaybe', but return an 'Option' instead of 'Maybe'.
---   Sometimes this is more convenient since the 'Monoid' instance XXX
-runActiveOption :: Real d => Active f a -> (d -> Option a)
-runActiveOption a = Option . runActiveMaybe a
+-- | Like 'runActiveMay', but return an 'Option' instead of 'Maybe'.
+--   Sometimes this is more convenient since the 'Monoid' instance for
+--   'Option' only requires a 'Semigroup' constraint on its type
+--   argument.
+runActiveOpt :: Real d => Active f a -> (d -> Option a)
+runActiveOpt a = Option . runActiveMay a
+
+-- | Do a case analysis on an 'Active' value of unknown finitude,
+--   doing one thing if it is finite and another if it is infinite.
+--
+--   As an example, the @makeFinite@ function defined below leaves the
+--   duration of finite actives alone, but cuts infinite actives down
+--   to have a default duration of 3.
+--
+--   >>> let makeFinite :: Active f a -> ActF a; makeFinite = withActive id (cut 3)
+--   >>> sample 1 (makeFinite (lasting 7 'a'))
+--   "aaaaaaaa"
+--   >>> sample 1 (makeFinite (always 'a'))
+--   "aaaa"
 
 withActive :: (Active 'F a -> b) -> (Active 'I a -> b) -> Active f a -> b
 withActive onFinite onInfinite a@(Active d f) =
@@ -366,9 +423,25 @@ withActive onFinite onInfinite a@(Active d f) =
     Duration _ -> onFinite a
     Forever    -> onInfinite a
 
+-- | Extract the duration of an 'Active' value.  Returns 'Nothing' for
+--   infinite values.
+--
+--   >>> duration (lasting 3 'a')
+--   Just (3 % 1)
+--   >>> duration (movie [lasting 3 'a', lasting 2 'b'])
+--   Just (5 % 1)
+--   >>> duration (always 'a')
+--   Nothing
 duration :: Active f a -> Maybe Rational
 duration (Active d _) = fromDuration d
 
+-- | Extract the duration of an 'Active' value that is known to be
+--   finite.
+--
+--   >>> durationF (lasting 3 'a')
+--   3 % 1
+--   >>> durationF (movie [lasting 3 'a', lasting 2 'b'])
+--   5 % 1
 durationF :: Active F a -> Rational
 durationF (Active d _) = fromDurationF d
 
@@ -383,13 +456,17 @@ end (Active (Duration d) f) = f d
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
 --   "frame rate", or number of samples per unit time.  That is,
---   @simulate f a@ samples @a@ at times \( 0, \frac 1 f, \frac 2 f,
---   \dots \), ending at the last multiple of \(1/f\) which is not
+--   @sample f a@ samples @a@ at times
+--   \( 0, \frac 1 f, \frac 2 f, \dots \),
+--   ending at the last multiple of \(1/f\) which is not
 --   greater than the duration.  The list will be infinite iff the
 --   'Active' is.
-simulate :: Real d => d -> Active f a -> [a]
-simulate 0  _ = error "Active.simulate: Frame rate can't equal zero"
-simulate fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
+--
+--   >>> sample 2 (interval 0 3 <#> (^2) :: ActF Double)
+--   [0.0,0.25,1.0,2.25,4.0,6.25,9.0]
+sample :: Real d => d -> Active f a -> [a]
+sample 0  _ = error "Active.sample: Frame rate can't equal zero"
+sample fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
 
   -- We'd like to just say (map f [0, 1/n .. d]) above but that
   -- doesn't work, because of the weird behavior of Enum with floating
@@ -397,7 +474,7 @@ simulate fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRationa
   -- bigger than d.  This way we also avoid the error that can
   -- accumulate by repeatedly adding 1/n.
 
-simulate fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
+sample fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
 
 --------------------------------------------------
 -- Sequential composition
@@ -476,17 +553,14 @@ a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (First a))
 --   that the final value of @x@ is combined via ('<>') with every
 --   value from @y@.  For example:
 --
---   XXX look into actual executable doc examples
---
---   @
---   >>> let x = active 3 Sum :: Active 'F (Sum Rational)
+--   >>> :m +Data.Ratio
+--   >>> let x = active 3 Sum :: ActF (Sum Rational)
 --   >>> let a1 = x ->- x
 --   >>> let a2 = x -<>- x
---   >>> map (numerator . getSum . runActive a1) [0 .. 6]
---     [0,1,2,3,1,2,3]
---   >>> map (numerator . getSum . runActive a2) [0 .. 6]
---     [0,1,2,3,4,5,6]
---   @
+--   >>> map (numerator . getSum) (sample 1 a1)
+--   [0,1,2,3,1,2,3]
+--   >>> map (numerator . getSum) (sample 1 a2)
+--   [0,1,2,3,4,5,6]
 --
 --   @(-<>-)@ satisfies the law:
 --
@@ -565,19 +639,24 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 ----------------------------------------
 -- Unioning parallel composition
 
-infixr 6 <⊔>
+infixr 6 <∪>
+infixr 6 `parU`
 
--- | Unioning parallel composition.  The duration of @x <⊔> y@ is the
+-- | Unioning parallel composition.  The duration of @x \`parU\` y@ is the
 --   /maximum/ of the durations of @x@ and @y@.  Where they are both
 --   defined, the values are combined with ('<>').  Where only one is
 --   defined, its value is simply copied.
-(<⊔>) :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
-a1@(Active d1 _) <⊔> a2@(Active d2 _)
+parU :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
+a1@(Active d1 _) `parU` a2@(Active d2 _)
   = Active (d1 `maxDuration` d2)
-           (\t -> fromJust . getOption $ runActiveOption a1 t <> runActiveOption a2 t)
+           (\t -> fromJust . getOption $ runActiveOpt a1 t <> runActiveOpt a2 t)
                   -- fromJust is safe since the (Nothing, Nothing) case
                   -- can't happen: at least one of a1 or a2 will be defined everywhere
                   -- on the interval between 0 and the maximum of their durations.
+
+-- | An infix Unicode synonym for 'parU'.
+(<∪>) :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
+(<∪>) = parU
 
 -- | If @a@ is a 'Semigroup', then 'Active n f a' forms a 'Semigroup'
 --   under unioning parallel composition.  Notice that the two
@@ -585,7 +664,7 @@ a1@(Active d1 _) <⊔> a2@(Active d2 _)
 --   both infinite; ('<⊔>') is strictly more general since it can
 --   combine active values with different finitudes.
 instance Semigroup a => Semigroup (Active f a) where
-  (<>) = (<⊔>)
+  (<>) = (<∪>)
 
 -- | If @a@ is a 'Monoid', then 'Active n F a' forms a 'Monoid' under
 --   unioning parallel composition.  The identity element is
@@ -626,19 +705,26 @@ instance IApplicative Active where
 --   'x'.  A synonym for 'ipure'.
 --
 --   <<diagrams/src_Active_alwaysDia.svg#diagram=alwaysDia&width=200>>
+--
+--   > alwaysDia = illustrateActive (always 2)
+
 always :: a -> Active 'I a
 always = Active Forever . const
 
-infixr 6 <⊓>
+infixr 6 `parI`
+infixr 6 <∩>
 
--- | Intersecting parallel composition.  The duration of @x '<⊓>' y@ is
+-- | Intersecting parallel composition.  The duration of @x \`parI\` y@ is
 --   the /minimum/ of the durations of @x@ and @y@.
 --
 --   Note that this is a special case of the 'IApplicative' instance
 --   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
-(<⊓>) :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊓ f2) a
-(<⊓>) = iliftA2 (<>)
+parI :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊓ f2) a
+parI = iliftA2 (<>)
 
+-- | An infix Unicode synonym for 'parI'.
+(<∩>) :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊓ f2) a
+(<∩>) = parI
 --------------------------------------------------
 -- Other combinators
 
@@ -731,31 +817,27 @@ cut c (Active d f) = Active ((Duration $ toRational c) `minDuration` d) f
 -- > illustrateActiveSum :: Active f (Sum Double) -> Diagram B
 -- > illustrateActiveSum = illustrateActive . fmap getSum
 -- >
+-- > illustrateActiveR :: Active f Rational -> Diagram B
+-- > illustrateActiveR = illustrateActive . fmap fromRational
+-- >
 -- > illustrateActive :: Active f Double -> Diagram B
--- > illustrateActive act = mconcat
--- >   [ closedPt # moveTo (0                            ^& start act)
--- >   , closedPt # moveTo (fromRational (durationF act) ^& end   act)
--- >   , zipWith (^&) [0, 1/2 ..] (simulate 2 act)
--- >     # cubicSpline False
--- >     # lc red
--- >   , axes
--- >   ]
--- >   # frame 0.5
+-- > illustrateActive = illustrateActive' (1/2)
 -- >
--- > illustrateActI :: ActI Double -> Diagram B
--- > illustrateActI
--- >
+-- > illustrateActive' :: Rational -> Active f Double -> Diagram B
+-- > illustrateActive' pd = frame 0.5 . withActive (endPt <> base) base
+-- >   where
+-- >     endPt act
+-- >       = closedPt
+-- >         # moveTo (fromRational (durationF act) ^& end act)
+-- >     base :: Active f Double -> Diagram B
+-- >     base act = mconcat
+-- >       [ closedPt # moveTo (0 ^& start act)
+-- >       , zipWith (^&) (map fromRational [0, pd ..])
+-- >                      (sample (1/pd) (act # cut 5.5))
+-- >         # cubicSpline False
+-- >         # lc red
+-- >       , axes
+-- >       ]
 -- >
 -- > closedPt = circle 0.15 # lw none  # fc red
 -- > openPt   = circle 0.15 # lw thick # lc red
--- >
--- > alwaysDia = (closedPt <> hrule 1.5 # lc red # alignL) # translateY 0.5
--- >             <> axes
--- >
--- > uiDia = mconcat
--- >   [ closedPt
--- >   , (origin ~~ (1 ^& 1)) # lc red
--- >   , closedPt # moveTo (1 ^& 1)
--- >   , axes
--- >   ]
--- >   # frame 0.1

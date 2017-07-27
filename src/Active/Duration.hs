@@ -35,7 +35,7 @@ module Active.Duration
 
     -- * Operations
 
-  , addDuration, maxDuration, minDuration, compareDuration
+  , addDuration, subDuration, maxDuration, minDuration, compareDuration
 
   ) where
 
@@ -162,6 +162,15 @@ addDuration :: Num n => Duration f1 n -> Duration f2 n -> Duration (f1 ⊔ f2) n
 addDuration Forever      _            = Forever
 addDuration (Duration _) Forever      = Forever
 addDuration (Duration a) (Duration b) = Duration (a + b)
+
+-- | Subtract a finite duration from another duration.  If the first
+--   duration is infinite, the result is also infinite.  If the second
+--   duration is longer than the first, the result is zero.
+subDuration :: (Num n, Ord n) => Duration f1 n -> Duration F n -> Duration f1 n
+subDuration Forever      _            = Forever
+subDuration (Duration a) (Duration b)
+  | b <= a    = Duration (a - b)
+  | otherwise = Duration 0
 
 -- | The maximum of two durations.
 maxDuration :: Ord n => Duration f1 n -> Duration f2 n -> Duration (f1 ⊔ f2) n

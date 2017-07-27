@@ -84,7 +84,7 @@ module Active
     -- * Other combinators
 
   , stretch, stretch', stretchTo, matchDuration
-  , cut, backwards, snapshot
+  , omit, cut, backwards, snapshot
 
   ) where
 
@@ -784,6 +784,11 @@ snapshot t a = always (runActive a t)
 --   @d@.  Has no effect if @a@ is already shorter than @d@.
 cut :: Real d => d -> Active f a -> Active 'F a
 cut c (Active d f) = Active ((Duration $ toRational c) `minDuration` d) f
+
+-- | @omit d a@ omits the first @d@ time units from @a@. the result is
+--   only defined if @d@ is less than or equal to the duration of @a@.
+omit :: Rational -> Active f a -> Active f a
+omit o (Active d f) = Active (d `subDuration` (Duration o)) (f . (+o))
 
 --------------------------------------------------
 

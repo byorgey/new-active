@@ -222,8 +222,10 @@ type ActI = Active 'I
 --            = ('interval' 0 d) '<#>' f@
 --
 --   In the example below, @activeF 2 (^2)@ constructs the Active
---   value which lasts for 2 time units and takes on the value
---   \( t^2 \) at time \( t \).
+--   value which lasts for 2 time units and takes on the value \( t^2
+--   \) at time \( t \).  Note that an alternative, perhaps more
+--   idiomatic way to construct the same value would be @'cut' 2
+--   ('dur'^2)@.
 --
 --   <<diagrams/src_Active_activeFDia.svg#diagram=activeFDia&width=200>>
 --
@@ -239,6 +241,10 @@ activeF d = Active (Duration d)
 --   <<diagrams/src_Active_activeIDia.svg#diagram=activeIDia&width=200>>
 --
 --   > activeIDia = illustrateActive' 0.1 [] $ activeI (sqrt . fromRational)
+--
+--   Since @Active 'I a@ is an instance of 'Floating' whenever @a@ is,
+--   @activeI (sqrt . fromRational)@ can alternatively be written as
+--   @sqrt (fromRational '<$>' 'dur')@.
 activeI :: (Rational -> a) -> Active 'I a
 activeI = Active Forever
 
@@ -379,13 +385,13 @@ infixl 8 <#>
 --
 --   ('<#>') has the same precedence as ('#') from the diagrams
 --   library (namely, @infixl 8@) for the same reason: so an 'Active'
---   build via ('<#>') can be combined with others via infix
+--   built via ('<#>') can be combined with others via infix
 --   combinators such as 'parI' without needing parentheses.
 --
 --   <<diagrams/src_Active_pamfDia.svg#diagram=pamfDia&width=200>>
 --
 --   > pamfDia = illustrateActive' 0.1 [] . fmap getSum $
---   >   interval 0 3 <#> (Sum . fromRational) `parI` sin' <#> Sum
+--   >   interval 0 3 <#> (Sum . fromRational) `parI` (sin'/2) <#> Sum
 
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip (<$>)
@@ -975,7 +981,7 @@ instance Floating a => Floating (Active 'I a) where
   atanh = fmap atanh
 
 -- | @'always' x@ creates an infinite 'Active' which is constantly
---   'x'.  A synonym for 'ipure'.
+--   'x'.  Note this is a synonym for 'ipure'.
 --
 --   <<diagrams/src_Active_alwaysDia.svg#diagram=alwaysDia&width=200>>
 --

@@ -38,7 +38,34 @@
 --   with special attention paid to how underlying values should be
 --   composed when there is overlap.
 --
--- XXX examples/tutorial --- where?
+-- Throughout this Haddock documentation, various primitive 'Active'
+-- values and combinators are illustrated using graphical
+-- representations of time-varying numeric values, that is, values of
+-- type @Active f d@ for some numeric type @d@.  They are drawn with
+-- time increasing along the x-axis and numeric value on the y-axis.
+-- For example, the 'Active' of duration 3 which has value \(t/2\) at
+-- time \(t\) would be drawn like this:
+--
+-- <<diagrams/src_Active_exampleDia.svg#diagram=exampleDia&width=200>>
+--
+-- Some combinators are also illustrated by showing "before" and
+-- "after" diagrams, to visualize their effect.  For example, the
+-- 'backwards' combinator reverses a finite 'Active' in time; it could
+-- be illustrated thus:
+--
+-- <<diagrams/src_Active_exampleCombDia.svg#diagram=exampleCombDia&width=450>>
+--
+-- Often, the meaning of combining @Active f a@ values depends on a
+-- 'Semigroup' instance for @a@.  Most of the illustrations use the
+-- 'Sum' semigroup over the underlying numeric type.  For example, the
+-- operation of combining two 'Active' values in parallel is
+-- illustrated by adding their respective values:
+--
+-- <<diagrams/src_Active_parUDia.svg#diagram=parUDia&width=450>>
+--
+-- The code for producing these diagrams isn't particularly pretty,
+-- but you can look at it if you like---just view the source of this
+-- module and scroll all the way to the bottom.
 --
 -----------------------------------------------------------------------------
 
@@ -83,14 +110,28 @@ module Active
     -- * Parallel composition
     -- $par
 
+    -- ** Unioning parallel composition
+    -- $union
+
+  , parU, (<∪>), stackNE, stack
+
+    -- ** Intersecting parallel composition
+    -- $inter
+
   , IApplicative(..)
+  , parI, (<∩>)
 
-  , parU, (<∪>), stackNE, stack, parI, (<∩>)
+    -- * Modifying
 
-    -- * Other combinators
+    -- ** Stretching
 
   , stretch, stretch', stretchTo, matchDuration
-  , cut, omit, slice, backwards, snapshot
+
+    -- ** Slicing and dicing
+  , cut, omit, slice
+
+    -- ** Playing with time
+  , backwards, snapshot
 
   ) where
 
@@ -106,8 +147,6 @@ import           Linear.Vector
 import           Active.Duration
 import           Control.IApplicative
 
-
--- XXX go through and include diagrams of everything!
 
 ------------------------------------------------------------
 --  Active
@@ -221,6 +260,13 @@ instant = lasting 0
 
 -- | A constant value lasting for the specified duration.
 --
+-- @'lasting' d = 'activeF' d . const
+--          = 'cut' d . always@
+--
+--   <<diagrams/src_Active_lastingDia.svg#diagram=lastingDia&width=200>>
+--
+--   > lastingDia = illustrateActive (lasting 3 2)
+--
 --   This reads particularly nicely when used with postfix function
 --   application, a la @(#)@ from the diagrams library.  For example:
 --
@@ -233,12 +279,6 @@ instant = lasting 0
 --   ]
 -- @
 --
--- @'lasting' d = 'activeF' d . const
---          = 'cut' d . always@
---
---   <<diagrams/src_Active_lastingDia.svg#diagram=lastingDia&width=200>>
---
---   > lastingDia = illustrateActive (2 # lasting 3)
 
 lasting :: Rational -> a -> Active 'F a
 lasting d = activeF d . const
@@ -260,7 +300,7 @@ ui = active 1 id
 --
 --   > sin'Dia = illustrateActive' 0.1 [] sin'
 --
---   >>> let act = cut 1 ((+) <$> sin' <:*> cos')
+--   >>> let act = cut 1 (sin' + cos')
 --   >>> let ht x = 8 + round (4*x)
 --   >>> mapM_ putStrLn $ samples 24 (act <#> \x -> replicate (ht x) '*')
 --   ************
@@ -378,6 +418,9 @@ discreteNE (a :| as) = (Active 1 f)
 
 -- | Like 'discreteNE', but with a list for convenience.  Calling
 --   'discrete' on the empty list is a runtime error.
+--
+--   >>> samples 30 (discrete ['a'..'e'])
+--   "aaaaaabbbbbbccccccddddddeeeeeee"
 discrete :: [a] -> Active 'F a
 discrete [] = error "Active.discrete must be called with a non-empty list."
 discrete (a : as) = discreteNE (a :| as)
@@ -509,6 +552,14 @@ end (Active (Duration d) f) = f d
 --   [(),(),(),()]
 --   >>> samples 1 (lasting 2.9 ())
 --   [(),(),()]
+--
+--   Note that @samples 1 (lasting 3 ())@ yields a list of length
+--   /four/, not three; this is because the last sample falls exactly
+--   on the endpoint:
+--
+--   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
+--
+--   > samplesDia = illustrateActive' (1/2) [(1,CC),(2,CC)] (lasting 3 2)
 samples :: Rational -> Active f a -> [a]
 samples 0  _ = error "Active.samples: Frame rate can't equal zero"
 samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
@@ -586,8 +637,8 @@ infixr 4 ->-, ->>, >>-, -<>-
 --
 --   <<diagrams/src_Active_seqMDia.svg#diagram=seqMDia&width=200>>
 --
---   > seqMDia = illustrateActive' (1/4) [(2,OO)]
---   >   ((fromRational . getSum) <$> (interval 0 2 <#> Sum ->- always 3 <#> Sum))
+--   > seqMDia = illustrateActive' (1/4) [(2,OO)] $
+--   >   getSum <$> (interval 0 2 <#> Sum ->- always 3 <#> Sum)
 --
 --   In the above example, the values at the endpoints of the two
 --   actives are combined via summing.  This particular example is a
@@ -663,8 +714,7 @@ stitch (a:as) = stitchNE (a :| as)
 --
 --   <<diagrams/src_Active_seqRDia.svg#diagram=seqRDia&width=200>>
 --
---   > seqRDia = illustrateActive' (1/4) [(2,OC)]
---   >   (fromRational <$> (interval 0 2 ->> always 3))
+--   > seqRDia = illustrateActive' (1/4) [(2,OC)] (interval 0 2 ->> always 3)
 --
 --   >>> samples 1 (cut 4 (interval 0 2 ->> always 3))
 --   [0 % 1,1 % 1,3 % 1,3 % 1,3 % 1]
@@ -676,8 +726,7 @@ a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (Last a))
 --
 --   <<diagrams/src_Active_seqLDia.svg#diagram=seqLDia&width=200>>
 --
---   > seqLDia = illustrateActive' (1/4) [(2,CO)]
---   >   (fromRational <$> (interval 0 2 >>- always 3))
+--   > seqLDia = illustrateActive' (1/4) [(2,CO)] (interval 0 2 >>- always 3)
 --
 --   >>> samples 1 (cut 4 (interval 0 2 >>- always 3))
 --   [0 % 1,1 % 1,2 % 1,3 % 1,3 % 1]
@@ -697,7 +746,7 @@ movieNE scenes = coerce (stitchNE (coerce scenes :: NonEmpty (Active 'F (Last a)
 --   <<diagrams/src_Active_movieDia.svg#diagram=movieDia&width=200>>
 --
 --   > {-# LANGUAGE TupleSections #-}
---   > movieDia = illustrateActive' (1/4) (map (,OC) [1..4]) $ fromRational <$>
+--   > movieDia = illustrateActive' (1/4) (map (,OC) [1..4]) $
 --   >   movie [lasting 1 3, lasting 1 2, interval 0 2 # stretch 0.5, lasting 1 4]
 movie :: forall a. [Active 'F a] -> Active 'F a
 movie []     = error "Active.movie: Can't make empty movie!"
@@ -709,7 +758,7 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 -- | Accumulating sequential composition.
 --
 --   @x -<>- y@ first behaves as @x@, and then behaves as @y@, except
---   that the final value of @x@ is combined via ('<>') with every
+--   that the final value of @x@ is combined via ('<>') with /every/
 --   value from @y@.  So the final value of @x@ "accumulates" into the
 --   next 'Active' value being composed.
 --
@@ -730,7 +779,7 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 --   <<diagrams/src_Active_seqADia.svg#diagram=seqADia&width=200>>
 --
 --   > seqADia = illustrateActive' (0.1) [(1.5,CC),(3,CC)]
---   >   ((fromRational . getSum) <$> (stair -<>- stair -<>- stair))
+--   >   (getSum <$> (stair -<>- stair -<>- stair))
 --   >   where
 --   >     stair = (ui ->> lasting 0.5 1) <#> Sum
 --
@@ -773,8 +822,6 @@ accumulateNE = getAccumulating . foldB1 . coerce
 
 -- | A variant of 'accumulateNE' defined on lists instead of 'NonEmpty'
 --   for convenience; @accumulate []@ is a runtime error.
---
---   XXX example
 accumulate :: Semigroup a => [Active 'F a] -> Active 'F a
 accumulate []     = error "Active.accumulate: Can't accumulate empty list!"
 accumulate (a:as) = accumulateNE (a :| as)
@@ -792,14 +839,15 @@ accumulate (a:as) = accumulateNE (a :| as)
 -- durations is handled.  /Unioning/ parallel composition ('parU')
 -- results in an 'Active' as long as its longest input; conversely,
 -- /intersecting/ parallel composition ('parI') results in an 'Active'
--- as long as its shortest input.
---
--- XXX why we want/need both and can't really define one in terms of
--- the other.  Generalizing 'parI' to 'Applicative' instance, in which
--- case we really need the intersecting.
+-- as long as its shortest input.  Both are provided since they are
+-- both useful in different situations, and neither is more general
+-- than the other.
 
 --------------------------------------------------
 -- Unioning parallel composition
+
+-- $union
+-- XXX a paragraph about unioning parallel composition
 
 infixr 6 <∪>
 infixr 6 `parU`
@@ -808,6 +856,20 @@ infixr 6 `parU`
 --   /maximum/ of the durations of @x@ and @y@.  Where they are both
 --   defined, the values are combined with ('<>').  Where only one is
 --   defined, its value is simply copied.
+--
+--   <<diagrams/src_Active_parUDia.svg#diagram=parUDia&width=450>>
+--
+--   > parUDia = drawChain
+--   >   [ illustrateActives' 0.1 [[],[]] [a, b]
+--   >   , illustrateActive' 0.1 [(2,CO)]
+--   >       ((a <#> Sum `parU` b <#> Sum) <#> getSum)
+--   >   ]
+--   >   where
+--   >     a = interval 0 3 <#> fromRational
+--   >     b = (1 + cos'/8) # cut 2
+--
+--   This is the default combining operation for the 'Semigroup' and
+--   'Monoid' instances for 'Active'.
 parU :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
 a1@(Active d1 _) `parU` a2@(Active d2 _)
   = Active (d1 `maxDuration` d2)
@@ -843,11 +905,31 @@ stackNE = sconcat
 
 -- | Like 'stackNE', but on a list for convenience.  Calling 'stack'
 --   on the empty list is a runtime error.
+--
+--   <<diagrams/src_Active_stackDia.svg#diagram=stackDia&width=450>>
+--
+--   > stackDia = drawChain
+--   >   [ illustrateActives' 0.1 [[],[],[]] [a, b, c]
+--   >   , illustrateActive' 0.1 [(2,CO),(3,CO)]
+--   >       (stack (map (fmap Sum) [a,b,c]) <#> getSum)
+--   >   ]
+--   >   where
+--   >     a = interval 0 3 <#> fromRational
+--   >     b = (1 + cos'/8) # cut 2
+--   >     c = fromRational <$> cut 4 (((dur - 2)/2)^2)
+--
+
 stack :: Semigroup a => [Active f a] -> Active f a
 stack = sconcat . NE.fromList
 
 --------------------------------------------------
 -- Intersecting parallel composition
+
+-- $inter
+-- XXX A paragraph about intersecting parallel composition.  Discuss
+-- the IApplicative class and give some examples of using it.  Discuss
+-- special case of Num, Fractional instances.  Why those have to be
+-- for infinite only.
 
 instance IFunctor Active where
   imap f (Active d1 g) = Active d1 (f . g)
@@ -863,6 +945,35 @@ instance IApplicative Active where
   ipure = always
   Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
 
+instance Num a => Num (Active 'I a) where
+  fromInteger = ipure . fromInteger
+  (+)         = iliftA2 (+)
+  (*)         = iliftA2 (*)
+  negate      = fmap negate
+  abs         = fmap abs
+  signum      = fmap signum
+
+instance Fractional a => Fractional (Active 'I a) where
+  fromRational = ipure . fromRational
+  (/) = iliftA2 (/)
+
+instance Floating a => Floating (Active 'I a) where
+  pi    = ipure pi
+  exp   = fmap exp
+  log   = fmap log
+  sqrt  = fmap sqrt
+  (**)  = iliftA2 (**)
+  sin   = fmap sin
+  cos   = fmap cos
+  asin  = fmap asin
+  acos  = fmap acos
+  atan  = fmap atan
+  sinh  = fmap sinh
+  cosh  = fmap cosh
+  asinh = fmap asinh
+  acosh = fmap acosh
+  atanh = fmap atanh
+
 -- | @'always' x@ creates an infinite 'Active' which is constantly
 --   'x'.  A synonym for 'ipure'.
 --
@@ -876,11 +987,26 @@ always = Active Forever . const
 infixr 6 `parI`
 infixr 6 <∩>
 
--- | Intersecting parallel composition.  The duration of @x \`parI\` y@ is
---   the /minimum/ of the durations of @x@ and @y@.
+-- | Intersecting parallel composition.  The duration of @x \`parI\`
+--   y@ is the /minimum/ of the durations of @x@ and @y@.  XXX mention
+--   infinite backgrounds.  Or maybe mention that elsewhere?
 --
 --   Note that this is a special case of the 'IApplicative' instance
 --   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
+--
+--   @parI = iliftA2 (<>)@
+--
+--   <<diagrams/src_Active_parIDia.svg#diagram=parIDia&width=450>>
+--
+--   > parIDia = drawChain
+--   >   [ illustrateActives' 0.1 [[],[]] [a, b]
+--   >   , illustrateActive' 0.1 []
+--   >       ((a <#> Sum `parI` b <#> Sum) <#> getSum)
+--   >   ]
+--   >   where
+--   >     a = interval 0 3 <#> fromRational
+--   >     b = (1 + cos'/8) # cut 2
+
 parI :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊓ f2) a
 parI = iliftA2 (<>)
 
@@ -908,9 +1034,9 @@ unsafeStretch s (Active d f) = Active (s *^ d) (f . (/s))
 --   result is "x times as long" as the input; it simply stretches out
 --   the values in time.
 --
---   <<diagrams/src_Active_stretchDia.svg#diagram=stretchDia&width=200>>
+--   <<diagrams/src_Active_stretchDia.svg#diagram=stretchDia&width=450>>
 --
---   > stretchDia = illustrateActive (ui # stretch 3)
+--   > stretchDia = illustrateActiveFun (stretch 3) ui
 --
 --   >>> samples 1 (stretch 3 ui)
 --   [0 % 1,1 % 3,2 % 3,1 % 1]
@@ -925,9 +1051,9 @@ stretch s a
 --   reverse the active.  As a result, it is restricted to only finite
 --   actives.
 --
---   <<diagrams/src_Active_stretch'Dia.svg#diagram=stretch'Dia&width=200>>
+--   <<diagrams/src_Active_stretch'Dia.svg#diagram=stretch'Dia&width=450>>
 --
---   > stretch'Dia = illustrateActive (ui # stretch' (-3))
+--   > stretch'Dia = illustrateActiveFun (stretch' (-3)) ui
 --
 --   >>> samples 1 (stretch' (-3) ui)
 --   [1 % 1,2 % 3,1 % 3,0 % 1]
@@ -942,9 +1068,9 @@ stretch' s a
 --
 --   @backwards . backwards = id@
 --
---   <<diagrams/src_Active_backwardsDia.svg#diagram=backwardsDia&width=200>>
+--   <<diagrams/src_Active_backwardsDia.svg#diagram=backwardsDia&width=450>>
 --
---   > backwardsDia = illustrateActive (backwards ui)
+--   > backwardsDia = illustrateActiveFun backwards (interval 0 3)
 backwards :: Active 'F a -> Active 'F a
 backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
 
@@ -964,7 +1090,7 @@ matchDuration a@(Active (Duration d1) _) (Active (Duration d2) _) = stretch (d2/
 -- | Stretch a finite active by whatever factor is required so that it
 --   ends up with the given duration.
 --
---   <<diagrams/src_Active_stretchToDia.svg#diagramg=stretchToDia&width=200>>
+--   <<diagrams/src_Active_stretchToDia.svg#diagram=stretchToDia&width=200>>
 --
 --   > stretchToDia = illustrateActive (interval 0 3 # stretchTo 5)
 --
@@ -978,19 +1104,39 @@ stretchTo n a@(Active (Duration d) _) = stretch (n / d) a
 --
 --   @snapshot t a = always (runActive a t)@
 --
---   >>> take 3 (samples 1 (snapshot (1/8) cos'))
---   [0.7071067811865476,0.7071067811865476,0.7071067811865476]
+--   <<diagrams/src_Active_snapshotDia.svg#diagram=snapshotDia&width=450>>
+--
+--   > snapshotDia = illustrateActiveFun' 0.1 [(9/8,CC)] []
+--   >   (snapshot (1/8)) cos'
+--
+--   >>> take 3 (samples 1 (snapshot (9/8) cos'))
+--   [0.7071067811865477,0.7071067811865477,0.7071067811865477]
 snapshot :: Rational -> Active f a -> Active 'I a
 snapshot t a = always (runActive a t)
 
--- | @cut d a@ cuts the given 'Active' @a@ to the specified duration
---   @d@.  Has no effect if @a@ is already shorter than @d@.
+-- | @cut d a@ cuts the given 'Active' @a@ (which can be finite or
+--   infinite) to the specified finite duration @d@.  Has no effect if
+--   @a@ is already shorter than @d@.
 --
---   <<diagrams/src_Active_cutDia.svg#diagram=cutDia&width=200>>
+--   @cut d dur = interval 0 d@
 --
---   > cutDia = illustrateActive' 0.1 [] (cut 1.7 cos')
+--   <<diagrams/src_Active_cutDia.svg#diagram=cutDia&width=450>>
+--
+--   > cutDia = illustrateActiveFun' 0.1 [] [] (cut 1.7) cos'
+--
+--   >>> samples 1 (cut 2 dur)
+--   [0 % 1,1 % 1,2 % 1]
+--   >>> samples 1 (cut 3 (interval 0 1))
+--   [0 % 1,1 % 1]
 cut :: Rational -> Active f a -> Active 'F a
 cut c (Active d f) = Active (Duration c `minDuration` d) f
+
+-- | @cutTo a1 a2@ cuts @a2@ to match the duration of @a1@, unless
+--   @a2@ is already shorter than @a1@ in which case @cutTo a1 = id@.
+--
+--   @cutTo = cut . durationF@
+cutTo :: Active 'F a -> Active f a -> Active 'F a
+cutTo = cut . durationF
 
 -- | @omit d a@ omits the first @d@ time units from @a@. The result is
 --   only defined if @d@ is less than or equal to the duration of @a@.
@@ -1002,12 +1148,24 @@ omit :: Rational -> Active f a -> Active f a
 omit o (Active d f) = Active (d `subDuration` (Duration o)) (f . (+o))
 
 -- | @slice s e@ "slices out" a finite portion of an 'Active' starting
---   at time @s@ and ending at time @e@.
+--   at time @s@ and ending at time @e@.  If the start time is greater
+--   than the end time, the resulting slice is reversed in time.  The
+--   result is only defined if \( \min(s,e) \leq d \) where \( d \) is
+--   the duration of the active.
 --
---   XXX
+--   @
+-- slice s e = cut (e - s) . omit s   (if e >= s)
+-- slice s e = backwards . slice e s
+--   @
 --
---   @slice s e = cut (e - s) . omit s@ if @e > s@
---   @slice s e = backwards . slice e s@
+--   <<diagrams/src_Active_sliceDia.svg#diagram=sliceDia&width=450>>
+--
+--   > sliceDia = illustrateActiveFun (slice 1.3 2.8) (interval 0 4)
+--
+--   <<diagrams/src_Active_sliceDia2.svg#diagram=sliceDia2&width=450>>
+--
+--   > sliceDia2 = illustrateActiveFun (slice 2.8 1.3) (interval 0 4)
+
 slice :: Rational -> Rational -> Active f a -> Active 'F a
 slice s e
   | e >= s    = cut (e - s) . omit s
@@ -1038,6 +1196,8 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- diagrams-haddock illustrations.  The code is not included in the
 -- typeset documentation.
 --
+-- > import Data.List (intersperse)
+-- >
 -- > axes :: Diagram B
 -- > axes = mconcat
 -- >   [ hashes
@@ -1053,19 +1213,22 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- > illustrateActiveSum = illustrateActive . fmap getSum
 -- >
 -- > illustrateActive :: RealFrac d => Active f d -> Diagram B
--- > illustrateActive = illustrateActive' (1/2) [] . fmap realToFrac
+-- > illustrateActive = illustrateActive' (1/2) []
 -- >
 -- > type Discontinuity = (Rational, DiscontinuityType)
 -- > data DiscontinuityType = OC | CO | OO | CC | N
 -- >
--- > illustrateActive' :: Rational -> [Discontinuity] -> Active f Double -> Diagram B
--- > illustrateActive' pd discs = frame 0.5 . withActive (endPt <> base) base
+-- > illustrateActive' :: RealFrac d => Rational -> [Discontinuity] -> Active f d -> Diagram B
+-- > illustrateActive' r ds a = illustrateActiveRaw r ds a <> axes
+-- >
+-- > illustrateActiveRaw :: RealFrac d => Rational -> [Discontinuity] -> Active f d -> Diagram B
+-- > illustrateActiveRaw pd discs = frame 0.5 . withActive (endPt <> base) base . fmap realToFrac
 -- >   where
 -- >     endPt act
 -- >       = closedPt
 -- >         # moveTo (fromRational (durationF act) ^& end act)
 -- >     base :: Active f Double -> Diagram B
--- >     base act = foldMap drawSegment segments <> axes
+-- >     base act = foldMap drawSegment segments
 -- >       where
 -- >         portionToIllustrate = act # cut 5.5
 -- >         discs' = (0,OC) : discs ++ [(durationF portionToIllustrate, N)]
@@ -1092,13 +1255,31 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- >               ]
 -- >
 -- > illustrateActiveFun :: RealFrac d => (Active f d -> Active f2 d) -> Active f d -> Diagram B
--- > illustrateActiveFun f act = hsep 1 . map centerY $
--- >   [ illustrateActive act
--- >   , arrowV (2 *^ unitX)
--- >   , illustrateActive (f act)
+-- > illustrateActiveFun = illustrateActiveFun' (1/2) [] []
+-- >
+-- > illustrateActiveFun'
+-- >   :: RealFrac d => Rational -> [Discontinuity] -> [Discontinuity]
+-- >   -> (Active f d -> Active f2 d) -> Active f d -> Diagram B
+-- > illustrateActiveFun' pd ds1 ds2 f act = drawChain
+-- >   [ illustrateActive' pd ds1 act
+-- >   , illustrateActive' pd ds2 (f act)
 -- >   ]
+-- >
+-- > drawChain :: [Diagram B] -> Diagram B
+-- > drawChain = hsep 1 . intersperse (arrowV (2 *^ unitX) # translateY 2.5)
 -- >
 -- > closedPt, openPt :: Diagram B
 -- > closedPt = circle 0.1 # lw none  # fc red
 -- > openPt   = circle 0.1 # lc red   # fc white
 -- >
+
+-- > illustrateActives :: RealFrac d => [Active f d] -> Diagram B
+-- > illustrateActives = beneath axes . foldMap (illustrateActiveRaw (1/2) [])
+-- >
+-- > illustrateActives' :: RealFrac d => Rational -> [[Discontinuity]] -> [Active f d] -> Diagram B
+-- > illustrateActives' r dss
+-- >   = beneath axes . mconcat
+-- >   . zipWith (illustrateActiveRaw r) dss
+
+-- > exampleDia = illustrateActive (interval 0 3 <#> (/2))
+-- > exampleCombDia = illustrateActiveFun backwards (interval 0 3 <#> (/2))

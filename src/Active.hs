@@ -1086,7 +1086,7 @@ backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
 --   <<diagrams/src_Active_matchDurationDia.svg#diagram=matchDurationDia&width=200>>
 --
 --   > matchDurationDia = illustrateActive' 0.1 [ (1.5,CC),(3.5,CC) ] $ getSum <$>
---   >   stack [ base, matchDuration (cut 7 cos') base <#> Sum ]
+--   >   stack [ base, matchDuration (cut 7 (cos'/3)) base <#> Sum ]
 --   >   where
 --   >     base = movie [ stretch 1.5 ui, interval 1 3, interval 3 2 ] <#> (Sum . fromRational)
 

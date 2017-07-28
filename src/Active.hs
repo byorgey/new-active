@@ -940,6 +940,8 @@ stretch' s a
 -- | Flip an 'Active' value so it runs backwards.  For obvious
 --   reasons, this only works on finite 'Active'\s.
 --
+--   @backwards . backwards = id@
+--
 --   <<diagrams/src_Active_backwardsDia.svg#diagram=backwardsDia&width=200>>
 --
 --   > backwardsDia = illustrateActive (backwards ui)
@@ -975,6 +977,9 @@ stretchTo n a@(Active (Duration d) _) = stretch (n / d) a
 --   freezing the resulting value into an infinite constant.
 --
 --   @snapshot t a = always (runActive a t)@
+--
+--   >>> take 3 (samples 1 (snapshot (1/8) cos'))
+--   [0.7071067811865476,0.7071067811865476,0.7071067811865476]
 snapshot :: Rational -> Active f a -> Active 'I a
 snapshot t a = always (runActive a t)
 
@@ -990,15 +995,23 @@ cut c (Active d f) = Active (Duration c `minDuration` d) f
 -- | @omit d a@ omits the first @d@ time units from @a@. The result is
 --   only defined if @d@ is less than or equal to the duration of @a@.
 --
---   <<diagrams/src_Active_omitDia.svg#diagram=omitDia&width=200>>
+--   <<diagrams/src_Active_omitDia.svg#diagram=omitDia&width=450>>
 --
---   > omitDia = illustrateActive (omit 1.3 (interval 0 3))
+--   > omitDia = illustrateActiveFun (omit 1.3) (interval 0 3)
 omit :: Rational -> Active f a -> Active f a
 omit o (Active d f) = Active (d `subDuration` (Duration o)) (f . (+o))
 
--- XXX
+-- | @slice s e@ "slices out" a finite portion of an 'Active' starting
+--   at time @s@ and ending at time @e@.
+--
+--   XXX
+--
+--   @slice s e = cut (e - s) . omit s@ if @e > s@
+--   @slice s e = backwards . slice e s@
 slice :: Rational -> Rational -> Active f a -> Active 'F a
-slice s e = cut (e - s) . omit s
+slice s e
+  | e >= s    = cut (e - s) . omit s
+  | otherwise = backwards . slice e s
 
 --------------------------------------------------
 
@@ -1077,6 +1090,13 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- >               , (case d1 of OO -> closedPt ; _ -> mempty)
 -- >                   # moveTo (fromRational s ^& runActive act s)
 -- >               ]
+-- >
+-- > illustrateActiveFun :: RealFrac d => (Active f d -> Active f2 d) -> Active f d -> Diagram B
+-- > illustrateActiveFun f act = hsep 1 . map centerY $
+-- >   [ illustrateActive act
+-- >   , arrowV (2 *^ unitX)
+-- >   , illustrateActive (f act)
+-- >   ]
 -- >
 -- > closedPt, openPt :: Diagram B
 -- > closedPt = circle 0.1 # lw none  # fc red

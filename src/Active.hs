@@ -946,14 +946,23 @@ stretch' s a
 backwards :: Active 'F a -> Active 'F a
 backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
 
--- XXX comment me
-matchDuration :: Active 'F a -> Active 'F a -> Active 'F a
+-- | Stretch the first active so it has the same duration as the
+--   second.
+--
+--   <<diagrams/src_Active_matchDurationDia.svg#diagram=matchDurationDia&width=200>>
+--
+--   > matchDurationDia = illustrateActive' 0.1 [ (1.5,CC),(3.5,CC) ] $ getSum <$>
+--   >   stack [ base, matchDuration (cut 7 cos') base <#> Sum ]
+--   >   where
+--   >     base = movie [ stretch 1.5 ui, interval 1 3, interval 3 2 ] <#> (Sum . fromRational)
+
+matchDuration :: Active 'F a -> Active 'F b -> Active 'F a
 matchDuration a@(Active (Duration d1) _) (Active (Duration d2) _) = stretch (d2/d1) a
 
 -- | Stretch a finite active by whatever factor is required so that it
 --   ends up with the given duration.
 --
---   <<diagrams/src_Active_stretchToDia.svg#diagram=stretchToDia&width=200>>
+--   <<diagrams/src_Active_stretchToDia.svg#diagramg=stretchToDia&width=200>>
 --
 --   > stretchToDia = illustrateActive (interval 0 3 # stretchTo 5)
 --
@@ -971,11 +980,19 @@ snapshot t a = always (runActive a t)
 
 -- | @cut d a@ cuts the given 'Active' @a@ to the specified duration
 --   @d@.  Has no effect if @a@ is already shorter than @d@.
+--
+--   <<diagrams/src_Active_cutDia.svg#diagram=cutDia&width=200>>
+--
+--   > cutDia = illustrateActive' 0.1 [] (cut 1.7 cos')
 cut :: Rational -> Active f a -> Active 'F a
 cut c (Active d f) = Active (Duration c `minDuration` d) f
 
 -- | @omit d a@ omits the first @d@ time units from @a@. The result is
 --   only defined if @d@ is less than or equal to the duration of @a@.
+--
+--   <<diagrams/src_Active_omitDia.svg#diagram=omitDia&width=200>>
+--
+--   > omitDia = illustrateActive (omit 1.3 (interval 0 3))
 omit :: Rational -> Active f a -> Active f a
 omit o (Active d f) = Active (d `subDuration` (Duration o)) (f . (+o))
 

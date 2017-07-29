@@ -118,7 +118,8 @@ module Active
     -- ** Intersecting parallel composition
     -- $inter
 
-  , IApplicative(..)
+  , IApplicative(..), iliftA2
+
   , parI, (<∩>)
 
     -- * Modifying
@@ -166,10 +167,12 @@ import           Control.IApplicative
 --   particular that the interval is /closed/ on both ends: the
 --   function is defined at \(0\) as well as at the duration \(d\)).
 --
---   @Active f@ is a @Functor@, and @Active@ is an 'IApplicative';
---   if @a@ is a 'Semigroup' then @Active f a@ is as well.  These
---   instances are described in much more detail in the sections on
---   sequential and parallel composition below.
+--   @Active f@ is a @Functor@, and @Active@ is an 'IApplicative'; if
+--   @a@ is a 'Semigroup' then @Active f a@ is as well.  @Active I a@
+--   is an instance of 'Num', 'Fractional', and 'Floating' as long as
+--   there is a corresponding instance for @a@.  These instances are
+--   described in much more detail in the sections on sequential and
+--   parallel composition below.
 --
 --   This definition is intentionally abstract, since the
 --   implementation may change in the future to enable additional
@@ -909,6 +912,7 @@ accumulate (a:as) = accumulateNE (a :| as)
 ------------------------------------------------------------
 
 -- $par
+--
 -- In addition to sequential composition (with one 'Active' following
 -- another in time), 'Active'\s also support /parallel/ composition,
 -- where two or more 'Active'\s happen simultaneously.  There are two
@@ -917,29 +921,65 @@ accumulate (a:as) = accumulateNE (a :| as)
 -- durations is handled.  /Unioning/ parallel composition ('parU')
 -- results in an 'Active' as long as its longest input; conversely,
 -- /intersecting/ parallel composition ('parI') results in an 'Active'
--- as long as its shortest input.  Both are provided since they are
--- both useful in different situations, and neither is more general
--- than the other.
+-- as long as its shortest input.  In addition, intersecting
+-- composition can be generalized to an 'Applicative' instance, which
+-- allows applying time-varying functions to time-varying values. Both
+-- are provided since they are both useful in different situations,
+-- and neither is more general than the other.
 --
 -- Active values being composed in parallel are all aligned so they
 -- have the same starting time.  If you want to offset them in time
 -- from each other, you can use 'stackAt', or more fundamentally the
 -- 'delay' combinator, when the underlying type is a 'Monoid'; or
--- 'stackAtDef' when the underlying type is a 'Semigroup'.  XXX more ?
+-- 'stackAtDef' when the underlying type is a 'Semigroup'.
 
 --------------------------------------------------
 -- Unioning parallel composition
 
 -- $union
--- Unioning parallel composition XXX
+--
+-- Unioning parallel composition composes actives in parallel while
+-- "keeping as much information as possible".  This is the natural
+-- form of composition to use when putting together many active
+-- values, each of which may be defined for only part of the duration
+-- of the overall result.
+--
+-- Unioning parallel composition has many nice advantages over
+-- intersecting parallel composition:
+--
+-- * It keeps as much information as possible.
+--
+-- * When an identity element exists, it is the same as for sequential stitching
+--   composition (`->-`) (namely, @instant mempty@).
+--
+-- * It is easy to implement intersecting parallel composition in
+--   terms of unioning parallel composition: just compute the minimum
+--   duration and use 'cut' to make the arguments the same length
+--   before composing.  Conversely, it is relatively unsatisfactory to
+--   implement unioning parallel composition in terms of intersecting:
+--   one can first pad with 'mempty' to make the arguments the same
+--   duration before composing; however, this would require the
+--   underlying type to be 'Monoid', and both forms of parallel
+--   composition otherwise require only a 'Semigroup'.
+--
+-- However, despite these advantages, it does not make sense to take
+-- unioning parallel composition as primitive and implement
+-- intersecting parallel composition in terms of it, because we want
+-- to be able to generalize intersecting parallel composition to an
+-- 'Applicative' instance, which cannot be implemented in terms of
+-- unioning parallel composition; see the discussion in the section on
+-- intersecting composition below.
+
 
 infixr 6 <∪>
 infixr 6 `parU`
 
--- | Unioning parallel composition.  The duration of @x \`parU\` y@ is the
---   /maximum/ of the durations of @x@ and @y@.  Where they are both
---   defined, the values are combined with ('<>').  Where only one is
---   defined, its value is simply copied.
+-- | Unioning parallel composition.  The duration of @x \`parU\` y@ is
+--   the /maximum/ of the durations of @x@ and @y@.  Where they are
+--   both defined, the values are combined with ('<>').  Where only
+--   one is defined, its value is simply copied.  Notice that 'parU'
+--   may be applied to active values of any finitude; the finitude of
+--   the result is computed appropriately.
 --
 --   <<diagrams/src_Active_parUDia.svg#diagram=parUDia&width=450>>
 --
@@ -950,7 +990,10 @@ infixr 6 `parU`
 --   > parUEx  = parUExA `parU` parUExB
 --
 --   This is the default combining operation for the 'Semigroup' and
---   'Monoid' instances for 'Active'.
+--   'Monoid' instances for 'Active'.  Note, however, that 'parU' has
+--   a strictly more general type than ('<>'), which requires the two
+--   arguments to have the same finitude.
+
 parU :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
 a1@(Active d1 _) `parU` a2@(Active d2 _)
   = Active (d1 `maxDuration` d2)
@@ -1099,14 +1142,80 @@ stackAtDef a as
 -- >   where
 -- >     args@[a,b] = map (<#> getSum) stackAtEx2Args
 
+
 --------------------------------------------------
 -- Intersecting parallel composition
 
 -- $inter
--- XXX A paragraph about intersecting parallel composition.  Discuss
--- the IApplicative class and give some examples of using it.  Discuss
--- special case of Num, Fractional instances.  Why those have to be
--- for infinite only.
+--
+-- Intersecting parallel composition composes actives in parallel, but
+-- the result is defined only where /both/ inputs are defined.  One
+-- place this is particularly useful is in creating an infinite
+-- (perhaps static or repeating) "background" value and then composing
+-- it with a finite "foreground" value.  It is also the only possible
+-- semantics for an 'Applicative' instance: given a time-varying
+-- function and a time-varying argument, we can only produce a
+-- time-varying result when /both/ function and argument are defined.
+--
+-- However, because of its 'Finitude' type parameter, an actual
+-- 'Applicative' instance for 'Active' would be unsatisfactory:
+--
+-- * There is no way to implement @pure :: a -> Active F a@; the only
+--   sensible duration to choose would be 0, but this would not
+--   satisfy the 'Applicative' laws.
+--
+-- * Given this, we could only make an @instance Applicative (Active
+--   I)@.  Although this would work, it would be unsatisfactory to be
+--   restricted to applying only infinite time-varying functions to
+--   infinite time-varying values; we would like to use the
+--   @Applicative@ interface to work with finite durations as well.
+--
+-- In fact, 'Active' is an /indexed applicative functor/, where the
+-- applicative structure on active values is mirrored by a /monoidal/
+-- structure on the 'Finitude' type indices.  It works in much the
+-- same way as 'ZipList', if there were a version of 'ZipList' that
+-- tracked finitude at the type level. In particular:
+--
+-- * @ipure :: a -> Active I a@ creates an infinite constant.
+--
+-- * @('<:*>') :: Active f1 (a -> b) -> Active f2 a -> Active (f1 ⊓
+--   f2) b@ applies a time-varying function to a time-varying
+--   argument; the duration of the result is the minimum of the
+--   durations of the inputs, and the finitude of the result is
+--   computed appropriately at the type level.
+--
+-- Note that one can still use the normal 'fmap'/('<$>'), since
+-- mapping leaves duration unchanged.  For example, here is how we
+-- could add two time-varying numbers:
+--
+-- >>> let a = interval 0 3; b = always 2
+-- >>> samples 1 ((+) <$> a <:*> b)
+-- [2 % 1,3 % 1,4 % 1,5 % 1]
+--
+-- In the example, @a@ is finite and @b@ is infinite; adding them
+-- produces a finite result.  Instead of writing @(+) \<$\> a \<:*\>
+-- b@ we could also have written @'iliftA2' (+) a b@.
+--
+-- There are 'Num', 'Fractional', and 'Floating' instances for @Active
+-- I a@. Unfortunately, we can only have instances for @Active I@, for
+-- the same reason that we could only make an 'Applicative' instance
+-- for @Active I@; there is no way to implement 'fromInteger' and
+-- 'fromRational' for finite actives.  Ideally we would have an @INum@
+-- class, parallel to @IApplicative@, but we would lose built-in support
+-- for numeric constants.
+--
+-- At any rate, for infinite values at least, these instances allow us
+-- to write things like
+--
+-- >>> samples 3 (cut 1 (cos (pi * (dur <#> fromRational) / 2)))
+-- [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
+--
+-- rather than the more verbose, but equivalent,
+--
+-- >>> let a = cos <$> ((*) <$> ipure pi <:*> ((/) <$> (dur <#> fromRational) <:*> ipure 2))
+-- >>> samples 3 (cut 1 a)
+-- [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
+
 
 instance IFunctor Active where
   imap f (Active d1 g) = Active d1 (f . g)
@@ -1122,6 +1231,24 @@ instance IApplicative Active where
   ipure = always
   Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
 
+-- | Infinite 'Active' values can be treated as numeric. (See also the
+--   'Fractional' and 'Floating' instances.)  For example, this allows
+--   writing things like
+--
+--   >>> samples 3 (cut 1 (cos (pi * (dur <#> fromRational) / 2)))
+--   [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
+--
+--   rather than the more verbose, but equivalent,
+--
+--   >>> let a = cos <$> ((*) <$> ipure pi <:*> ((/) <$> (dur <#> fromRational) <:*> ipure 2))
+--   >>> samples 3 (cut 1 a)
+--   [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
+--
+--   Note that it is not possible to have an instance for @Active F@,
+--   since there would be no sensible way to implement 'fromInteger'.
+--   Ideally we would have an @INum@ class, parallel to
+--   'IApplicative', but we would lose built-in support for numeric
+--   constants.
 instance Num a => Num (Active 'I a) where
   fromInteger = ipure . fromInteger
   (+)         = iliftA2 (+)
@@ -1169,8 +1296,9 @@ infixr 6 `parI`
 infixr 6 <∩>
 
 -- | Intersecting parallel composition.  The duration of @x \`parI\`
---   y@ is the /minimum/ of the durations of @x@ and @y@.  XXX mention
---   infinite backgrounds.  Or maybe mention that elsewhere?
+--   y@ is the /minimum/ of the durations of @x@ and @y@.
+--
+--   This is often useful for XXX backgrounds.
 --
 --   Note that this is a special case of the 'IApplicative' instance
 --   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
@@ -1332,6 +1460,8 @@ snapshot t a = always (runActive a t)
 --   infinite) to the specified finite duration @d@.  Has no effect if
 --   @a@ is already shorter than @d@.
 --
+--   XXX mention 'take'
+--
 --   @cut d dur = interval 0 d@
 --
 --   <<diagrams/src_Active_cutDia.svg#diagram=cutDia&width=450>>
@@ -1359,6 +1489,8 @@ cutTo = cut . durationF
 
 -- | @omit d a@ omits the first @d@ time units from @a@. The result is
 --   only defined if @d@ is less than or equal to the duration of @a@.
+--
+--   XXX mention 'drop'
 --
 --   <<diagrams/src_Active_omitDia.svg#diagram=omitDia&width=450>>
 --

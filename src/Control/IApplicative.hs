@@ -33,7 +33,7 @@ class IFunctor (f :: k -> * -> *) where
 infixl 4 <:*>
 
 -- | Applicative functors, indexed by a type-level monoid (of
---   arbitrary kind).  'ipure' and '(<:*>)' at the value level are
+--   arbitrary kind).  'ipure' and ('<:*>') at the value level are
 --   mirrored by the monoid identity and combining operation on the
 --   indices at the type level.  The monoid laws on the type indices
 --   are exactly what are needed to ensure the Applicative laws.

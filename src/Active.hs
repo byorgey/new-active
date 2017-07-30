@@ -1298,7 +1298,10 @@ infixr 6 <∩>
 -- | Intersecting parallel composition.  The duration of @x \`parI\`
 --   y@ is the /minimum/ of the durations of @x@ and @y@.
 --
---   This is often useful for XXX backgrounds.
+--   This is often useful for composing infinite "backgrounds" with
+--   finite "foregrounds", where we only care about the duration of
+--   the foreground and simply want the background to be long enough
+--   to match.
 --
 --   Note that this is a special case of the 'IApplicative' instance
 --   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
@@ -1458,9 +1461,8 @@ snapshot t a = always (runActive a t)
 
 -- | @cut d a@ cuts the given 'Active' @a@ (which can be finite or
 --   infinite) to the specified finite duration @d@.  Has no effect if
---   @a@ is already shorter than @d@.
---
---   XXX mention 'take'
+--   @a@ is already shorter than @d@.  This is analogous to 'take' on
+--   lists.
 --
 --   @cut d dur = interval 0 d@
 --
@@ -1489,8 +1491,7 @@ cutTo = cut . durationF
 
 -- | @omit d a@ omits the first @d@ time units from @a@. The result is
 --   only defined if @d@ is less than or equal to the duration of @a@.
---
---   XXX mention 'drop'
+--   This is analogous to 'drop' on lists.
 --
 --   <<diagrams/src_Active_omitDia.svg#diagram=omitDia&width=450>>
 --
